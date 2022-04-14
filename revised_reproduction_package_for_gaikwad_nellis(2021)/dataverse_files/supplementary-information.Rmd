@@ -1,0 +1,2808 @@
+---
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_crop: yes
+    keep_tex: yes
+    number_sections: true
+  word_document: default
+header-includes:
+   - \usepackage{caption,booktabs,longtable,pdfpages,rotating,graphicx,footmisc,float,tikz,amsthm,afterpage,setspace,minitoc,appendix,etoc}
+   - \captionsetup{width=5in}
+   - \setlength\parindent{24pt}  
+   - \bibliographystyle{apsr}
+   - \renewcommand{\footnotesize}{\fontsize{10pt}{10pt}\selectfont}
+   - \renewcommand{\footnotelayout}{\setstretch{1.5}}
+   - \setlength{\footnotesep}{\baselineskip}   
+   - \captionsetup{width=6in}
+   - \renewcommand \thepart{}
+   - \renewcommand \partname{} 
+   - \renewcommand{\thesection}{\Alph{section}}
+   - \usepackage{lscape}
+   - \newcommand{\blandscape}{\begin{landscape}}
+   - \newcommand{\elandscape}{\end{landscape}}
+   - \usepackage[margin=1in]{geometry}
+   - \floatplacement{figure}{H} 
+   - \etocsettocstyle{\subsection*{\contentsname}}{\noindent\rule{\linewidth}{.4pt}}
+fontsize: 11.5pt
+---
+
+\clearpage
+
+\setcounter{page}{0}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\part*{}
+
+```{r include = F, warning = F, message = F}
+# preliminaries
+# clear environment
+  rm(list = ls())
+
+# withold warnings
+  options(warn=-1)
+  
+# global options
+   knitr::opts_chunk$set(cache = F, echo = F, warning=F, message=F)
+
+# install and load tinytex  
+  if (!require("tinytex")) install.packages("tinytex")
+  library(tinytex)
+
+# list required packages  
+    pks <- c(
+      "DeclareDesign",
+      "tidyverse",
+      "kableExtra",
+      "magrittr",
+      "rio",
+      "stargazer",
+      "lfe",
+      "car",
+      "ggpubr",
+      "scales",
+      "ggthemes",
+      "lubridate",
+      "splitstackshape",
+      "gridExtra",
+      "knitr")
+
+# install if necessary and load  
+  invisible(lapply(pks, function(x) if (!require(x, character.only=T)){
+    install.packages(x);library(x, character.only = T)}))
+```
+
+
+```{r}
+## data
+# load t1 data frame
+  t1_experiment_df <- 
+    readRDS(file="data-t1-experiment-df.Rds")
+
+# load t2 data frame
+  t2_experiment_df <- 
+    readRDS(file="data-t2-experiment-df.Rds")
+  
+# load world values survey voter turnout data
+  turnout <- 
+    import("data-wvs-voter-turnout.xlsx")
+
+# load admin data
+  admin_del_luc_clean <-
+    import("data-processing-times.csv")
+  
+# load ihds2 survey data
+  ihds2_clean <-
+    import("data-ihds2.csv")
+  
+# load csds data
+  del_2015_clean <-
+    import("data-csds-delhi-2015.csv")
+  
+# load elections data
+  ls_ps_t1_combined <-
+    import("data-election-results.csv")
+
+## exhibits  
+# load questionnaire
+  questions <- 
+    import("exhibit-survey-questions.xlsx")
+  
+# load index description
+  indexes <- 
+    import("exhibit-indexes.xlsx")  
+  
+# load voter registration table 
+  voter_reg <- 
+    import("exhibit-registration-worldwide.xlsx")
+
+# load literature review
+  lit_review <-
+    import("exhibit-literature-review.xlsx")
+  
+# load delhi voting behavior table
+  migrant_voting_behavior <-
+    import("exhibit-delhi-voting-patterns.xlsx")
+  
+# load ihds2 table
+  ihds2_table <-
+    import("exhibit-ihds2-vars.xlsx")
+
+## images
+  vid <- "pic-voter-id.png"
+  docform <- "pic-fieldteam.png"
+  offices <- "pic-offices.png"
+  t2letter <- "pic-t2-letter.pdf" 
+  t2email <- "pic-t2-email.pdf" 
+  t2whatsapp <- "pic-t2-whatsapp.pdf" 
+  t2blockdesign <- "pic-t2-block-design.pdf"
+  pic_form_6_p1 <- "pic-form-6-p1.pdf"
+  pic_form_6_p2 <- "pic-form-6-p2.pdf"
+  pic_form_7_p1 <- "pic-form-7-p1.pdf"
+  pic_form_7_p2 <- "pic-form-7-p2.pdf"  
+  pic_del_map <- "pic-del-map.pdf"
+  pic_luc_map <- "pic-luc-map.pdf"
+```
+
+
+
+
+```{r}
+# outliers in "income" covariate (see appendix for further elabloration)
+# we winsorise extreme upper values of "income": values that are greater than the value at the 99th percentile are replaced by the value at the 99th percentile
+
+# winsorize in T1 df
+  t1_experiment_df %<>%
+    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, quantile(b_income, c(0, .99)))/1000),
+           b_income_000 = b_income/1000)
+
+# winsorize in T2 df
+  t2_experiment_df %<>% 
+    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, quantile(b_income, c(0, .99)))/1000),
+           b_income_000 = b_income/1000)
+```
+
+```{r}
+# define t2 analysis df (including attritors) and create new weights (including attrition subjects) for attrition analyses
+  t2_experiment_df_w_attritors <- 
+    t2_experiment_df %>% 
+    group_by(i_t2_cluster) %>%
+      mutate(n = n()) %>% 
+    ungroup() %>% 
+    mutate(i_t2_weight_w_attritors = 1/n)
+
+# define main t2 analysis df (excluding attritors)
+  t2_experiment_df %<>%
+    filter(i_attrition==0)
+```
+
+```{r eval = F}
+# summary statistics cited in the main text
+## age
+  mean(t1_experiment_df$b_age, na.rm = T)
+
+## female
+  mean(t1_experiment_df$b_female, na.rm = T)
+
+## primary school
+  mean(t1_experiment_df$b_primary_edu, na.rm = T)
+  
+## relocated to city from different types of places
+  prop.table(table(t1_experiment_df$b_prior_home_type))
+
+## occupation (60-69 = PRODUCTION: SEMI-SKILLED AND UNSKILLED; 50-59 = PRODUCTION: SKILLED WORKERS; 30-39 = COMMERCE)
+  t1_experiment_df %>% 
+    mutate(
+      b_occupation_cat = floor(b_occupation/10)*10) %>% 
+    pull(b_occupation_cat) %>% 
+    table() %>% 
+    prop.table() %>% 
+    round(2)  
+
+## months residing in city     
+   mean(t1_experiment_df$b_12_months_stayed_city, na.rm = T)
+   
+## how good are current job opportunities in city
+   prop.table(table(t1_experiment_df$b_how_good_city_job_opportunities))
+
+## how good are current job opportunities back home
+   prop.table(table(t1_experiment_df$b_how_good_village_job_opportunities))
+   
+## incomes had gotten better/worse since migrating
+   prop.table(table(t1_experiment_df$b_incomes_increased_since_coming))
+  
+## wanting to reside in the city permanently
+   prop.table(table(t1_experiment_df$b_how_much_longer_city))
+   
+## efficacy
+   prop.table(table(t1_experiment_df$b_political_efficacy))
+   
+## accountabiliyu
+   t1_experiment_df %>% 
+     filter(i_t1 == 0) %>% 
+     pull(e_political_accountability) %>% 
+     table() %>% 
+     prop.table()
+   
+## proportion of muslims
+   prop.table(table(t1_experiment_df$b_muslim))
+
+## proportion of scs/sts
+   prop.table(table(t1_experiment_df$b_sc_st))
+   
+## proportion of muslims
+   median(t1_experiment_df$b_income_000_OUTLIER_FIXED, na.rm = T)
+   
+## t2: 79 percent of subjects either strongly or somewhat agreed that politicians and party workers had campaigned hard to win the votes in the respondent’s neighborhood
+   prop.table(table(t2_experiment_df$e_campaign5_exposure_hardwork))
+   
+## t2: 40 percent said that at least one incumbent politician or MP candidate had visited their basti 
+   prop.table(table(t2_experiment_df$e_campaign1_exposure_visits))
+   
+## t2: two percent reported having been offered a gift
+   prop.table(table(t2_experiment_df$e_campaign3_exposure_gifts))
+```
+
+```{r fig-1, fig.cap="Baseline descriptive statistics of migants' attachments to their former places of residence.", fig.height=6, fig.width=12}
+# mutate variables to give appropriate factor labels
+  out <-
+    t1_experiment_df %>% 
+    mutate(
+      a_fig_b_length_residence = 
+        case_when(
+          b_length_residence < 5 ~ 1,
+          b_length_residence >=5 & b_length_residence < 15 ~ 2,
+          b_length_residence >=15 & b_length_residence <= 25 ~ 3,
+          b_length_residence > 25 ~ 4),
+      a_fig_b_length_residence = 
+        recode_factor(a_fig_b_length_residence, `1` = "<5", `2` = "5-14", `3` = "15-25", `4` = ">25"),
+      b_fig_b_kms_to_home = 
+        case_when(
+          b_kms_to_home < 100 ~ 1,
+          b_kms_to_home >=100 & b_kms_to_home < 500 ~ 2,
+          b_kms_to_home >=500 & b_kms_to_home <= 1000 ~ 3,
+          b_kms_to_home > 1000 ~ 4),
+      b_fig_b_kms_to_home = 
+        recode_factor(b_fig_b_kms_to_home, `1` = "<100", `2` = "100-499", `3` = "500-1000", `4` = ">1000"),
+      c_fig_b_more_at_home_village = 
+        recode_factor(round(b_more_at_home_village, 1), `0` = "Very much \ndisagree", `0.3` = "Somewhat \ndisagree", `0.7` = "Somewhat \nagree", `1` = "Very much \nagree"),
+      d_fig_b_still_gets_village_schemes = 
+        recode_factor(b_still_gets_village_schemes, `0` = "No", `1` = "Yes"),
+      e_fig_b_owns_village_property = 
+        recode_factor(b_owns_village_property, `0` = "No", `1` = "Yes")
+    ) %>% 
+    select(contains("fig_"))
+
+# assign facet captions
+  names <- 
+    list(
+      "a_fig_b_length_residence" = 
+        "Length of residence in city (years).",
+      "b_fig_b_kms_to_home" = 
+        "Straight-line distance from Delhi/Lucknow to district of former residence (kms).",
+      "c_fig_b_more_at_home_village" = 
+        "To what extent to you agree or disagree: I feel more at home in my previous place of residence than I do in Delhi/Lucknow.",
+      "d_fig_b_still_gets_village_schemes" = 
+        "Do you or your immediate family continue to benefit from government schemes in your previous place of residence - for example, PDS, MGNREGA, or cash transfer schemes?",
+      "e_fig_b_owns_village_property" = 
+        "Do you or your spouse personally own land or property in your previous place of residence?")
+
+# make labeller function  
+  labeller_fun <-
+    function(variable,value){
+      return(str_wrap(names[value], width = 20))
+    }
+
+# print plot  
+  out %>%
+    pivot_longer(everything(), names_to = "var", values_to = "val") %>%
+    group_by(var) %>%
+    count(val) %>%
+    mutate(Label = n/sum(n), 1)  %>%
+    ggplot(aes(x = factor(val), y = n)) +
+    geom_col() +
+    facet_grid(.~var, scales = "free", labeller = labeller_fun) +
+    scale_x_discrete(expand = c(0, .5)) +
+    xlab("") +
+    ylab("Number of respondents") + 
+    ylim(c(0, 2005)) +
+    geom_text(aes(label = scales::percent(Label, accuracy = 0.1)), vjust = -0.5, size = 4) +
+    scale_fill_grey() + 
+    scale_color_grey() +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, vjust=0.99, hjust = 1, size = 12),
+          axis.text.y = element_text(size = 12),
+          axis.title = element_text(size = 12),
+          strip.text.x = element_text(size = 12))
+```
+
+\clearpage
+
+```{r results="asis"}
+# run model for voter ID
+  m1 <- 
+    lm(b_has_village_voter_id ~ 
+         b_more_at_home_village +
+         b_still_gets_village_schemes +
+         b_owns_village_property +
+         b_length_residence +
+         b_kms_to_home, 
+       data = t1_experiment_df)
+
+# run model for goes home to vote
+  m2 <- 
+    lm(b_pol_active_village ~ 
+         b_more_at_home_village +
+         b_still_gets_village_schemes +
+         b_owns_village_property +
+         b_length_residence +
+         b_kms_to_home, 
+       data = t1_experiment_df)
+
+# print table
+  stargazer(m1, m2, 
+          se = starprep(m1, m2), 
+          type='latex',
+          title = "[Exploratory] Baseline correlates of migrants' continued political participation in their former place of residence (``hometown''), estimated using OLS regression. For question wordings, see Figure 1. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = c("Has Hometown Voter ID", "Returned to Vote in Hometown"),
+          covariate.labels = c("More at home in hometown (0-1)",
+                               "Still receives hometown schemes (0/1)",
+                               "Owns hometown property (0/1)",
+                               "Length of residence in city (years)",
+                               "Straight-line distance to home district (kms)"),
+          add.lines = list(c("DV values", "\\{0,1\\}", "\\{0,1\\}")), 
+          header=FALSE,
+          float.env="table",
+          notes.label = "") 
+```
+
+\clearpage
+
+```{r}
+# t1 estimations function
+# create bare bones df
+  rns1 <- 
+   data.frame(
+    v1 = c(
+      "T1 treatment", 
+      "",
+      "p-value (upper)",
+      "Control mean",
+      "Observations",
+      "Adjusted $R^2$"))
+
+# generate estimation function
+  t1_estimates <- 
+    function(dv = NULL,
+             cov = TRUE,
+             lag = NULL) {
+
+    # build formula (with covariates)
+      frm <- as.formula(paste0(dv, "~", lag, "+ i_t1 + b_female + b_age + b_muslim + b_sc_st + 
+  b_primary_edu + b_income_000_OUTLIER_FIXED + b_married + b_length_residence + b_owns_home"))
+      
+      
+    # build formula (without covariates)  
+      frm_min <- as.formula(paste0(dv, "~ i_t1"))
+ 
+    # run estimation
+     if(isTRUE(cov)) { 
+       mod <- lm_robust(frm, data = t1_experiment_df) 
+        } else {
+       mod <- lm_robust(frm_min, data = t1_experiment_df)
+               }
+
+    # capture control mean    
+        mod$cmean <- 
+          lm(frm_min, data = t1_experiment_df)$coefficients[1]
+        
+    # compute and capture upper p-value based on t-stat    
+        mod$mainp <- pt(coef(summary(mod))["i_t1","t value"], 
+                        coef(summary(mod))["i_t1","DF"], 
+                        lower.tail = F)
+        
+    # make nice table    
+        mod$tab <- 
+          data.frame(
+            V1 = c(
+              paste0( format(round(coef(summary(mod))["i_t1","Estimate"], 3), nsmall = 3)),
+              paste0("(", format(round( coef(summary(mod))["i_t1","Std. Error"], 3), nsmall = 3), ")"),
+              paste0(format(round(mod$mainp, 3), nsmall = 3)),
+              paste0(format(round(mod$cmean, 3), nsmall = 3)),
+              paste0(format(mod$nobs, nsmall = 0, big.mark = ",")),
+              paste0(format(round(mod$adj.r.squared  , 3), nsmall = 3)))) %>% 
+          mutate_all(as.character)
+      
+    # return the object      
+        return(mod)
+    }
+```
+
+\clearpage
+
+```{r results="asis"}
+# t1 table; voting
+  p1 <- t1_estimates(dv = "e_voter_id", lag = "b_has_village_voter_id", cov = T)
+  p2 <- t1_estimates(dv = "e_voted_2019", lag = "b_not_voted_previously ", cov = T)
+  p3 <- t1_estimates(dv = "e_vote_future", lag = "b_vote_mc_elecs_how_likely", cov = T)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Has City-Based\n Voter ID \n(1)", 
+      "Voted in City\n in 2019 \n(2)", 
+      "Likelihood of Voting\n in City in Future \n(3)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 0.33, 0.67, 1\\}$")
+  
+# set caption
+  cap <- 
+    "[Pre-registered] T1 experimental results for primary political outcomes. Outcomes are whether respondent (1) currently has a voter ID card allowing them to vote in city elections; (2) voted in the city during the 2019 Lok Sabha elections; and (3) intends to vote in the next state elections held in the city. OLS estimates of intent to treat effects. Models include covariates. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T)
+```
+
+\clearpage
+
+```{r results="asis"}
+# t1 table; additional attitudes
+  p1 <- t1_estimates(dv = "e_political_interest", lag = "b_political_interest", cov = T)
+  p2 <- t1_estimates(dv = "e_political_accountability", cov = T)
+  p3 <- t1_estimates(dv = "e_political_efficacy", lag = "b_political_efficacy", cov = T)
+  p4 <- t1_estimates(dv = "e_political_trust", lag = "b_political_trust", cov = T)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Political\n Interest\n Index \n(1)", 
+      "Politician\n Accountability\n Perceptions \n(2)", 
+      "Sense of\n Political\n Efficacy \n(3)", 
+      "Political\n Trust\n Index \n(4)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$[-1.44, 1.56]$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$[-1.62, 1.17]$")
+
+# set caption
+  cap <- 
+    "[Pre-registered] T1 experimental results for additional political outcomes. Outcomes are whether respondent (1) pays attention to news about national, state, and city politics; (2) agrees that elected politicians are accountable to city residents; (3) agrees that citizens have an influence on the government; (4) has trust in the national, state, and city governments as well as political parties. OLS estimates of intent to treat effects. Models include covariates. Robust standard errors in parentheses."
+  
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab, p4$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T)
+```
+
+\clearpage
+
+```{r results="asis"}
+# we split at the median of these vars for sake of support and easy interpretation
+  t1_experiment_df %<>% 
+    mutate(b_income_dummy = (b_income_000_OUTLIER_FIXED >= median(b_income_000_OUTLIER_FIXED))*1,
+           b_length_residence_dummy = (b_length_residence >= median(b_length_residence))*1) 
+
+# estimations
+  h1 <- lm(e_voter_id ~ 
+             i_t1*b_primary_edu + 
+             i_t1*b_muslim + 
+             i_t1*b_sc_st + 
+             i_t1*b_income_dummy + 
+             i_t1*b_length_residence_dummy, 
+            data = t1_experiment_df)
+
+  h2 <- lm(e_voted_2019 ~ 
+             i_t1*b_primary_edu + 
+             i_t1*b_muslim + 
+             i_t1*b_sc_st + 
+             i_t1*b_income_dummy + 
+             i_t1*b_length_residence_dummy, 
+            data = t1_experiment_df)
+
+# print table
+  stargazer(h1, h2, 
+          se = starprep(h1, h2), 
+          type='latex',
+          title = "[Pre-registered] Estimates of heterogeneous effects of T1 treatment. Models do not include additional covariates. All independent variables are dichotomous and are described in the text. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = c("Has City-Based Voter ID", "Voted in City in 2019"),
+          order=c("i_t1:b_primary_edu", 
+                  "i_t1:b_muslim", 
+                  "i_t1:b_sc_st", 
+                  "i_t1:b_income_dummy", 
+                  "i_t1:b_length_residence_dummy"),
+          covariate.labels = c("T1 x Primary education", 
+                               "T1 x Muslim",
+                               "T1 x SC/ST",
+                               "T1 x High income",
+                               "T1 x Long-term migrant",
+                               "T1",
+                               "Primary education",
+                               "Muslim",
+                               "SC/ST",
+                               "High income",
+                               "Long-term migrant"),
+          header = FALSE,
+          float.env = "table",
+          notes.label = "")
+```
+
+\clearpage
+
+```{r}
+# t2 estimation function
+# row names for table
+  rns2 <- 
+    data.frame(
+      v1 = c(
+        "T2 treatment", 
+        "",
+        "p-value (upper)",
+        "Control mean",
+        "Observations",
+        "No. of Clusters",
+        "Adjusted $R^2$"))
+
+# estimation function
+  t2_estimates <- 
+    function(dv = NULL, 
+             cov = TRUE) {
+  
+        frm_max <- as.formula(paste0(dv, "~ i_t2_treat + b_politician_visits + b_female + b_age + b_muslim + b_sc_st + 
+    b_primary_edu + b_income_000_OUTLIER_FIXED + b_married + b_length_residence + b_owns_home"))
+        
+        frm_min <- as.formula(paste0(dv, "~ i_t2_treat"))
+        
+         if(isTRUE(cov)) {frm <- frm_max} else {frm <- frm_min}
+   
+         mod <- lm_robust(frm,
+                data = t2_experiment_df,
+                weights = i_t2_weight,
+                clusters = i_t2_cluster,
+                se_type = "stata",
+                fixed_effects = i_t2_block)
+  
+          mod$cmean <- lm(frm_min, weights = i_t2_weight, data = t2_experiment_df)$coefficients[1]
+          
+          mod$mainp <- pt(coef(summary(mod))["i_t2_treat","t value"], 
+                          coef(summary(mod))["i_t2_treat","DF"], 
+                          lower.tail = F)
+          
+          mod$tab <- 
+            data.frame(
+              V1 = c(
+                paste0( format(round( coef(summary(mod))["i_t2_treat","Estimate"]   , 3), nsmall = 3) ),
+                paste0("(", format(round( coef(summary(mod))["i_t2_treat","Std. Error"]   , 3), nsmall = 3), ")"),
+                paste0( format(round( mod$mainp , 3), nsmall = 3) ),
+                paste0( format(round( mod$cmean  , 3), nsmall = 3) ),
+                paste0( format(mod$nobs, nsmall = 0, big.mark = ",")),
+                paste0( length(unique(t2_experiment_df$i_t2_cluster)) ),
+                paste0( format(round( mod$adj.r.squared  , 3), nsmall = 3) )))
+           return(mod)
+  }
+```  
+ 
+\clearpage
+ 
+```{r results="asis"} 
+# t2 table 
+  p1 <- t2_estimates("e_campaign_exposure")
+  p2 <- t2_estimates("e_campaign1_exposure_visits")
+  p3 <- t2_estimates("e_campaign2_exposure_canvassed")
+  p4 <- t2_estimates("e_campaign3_exposure_gifts")
+  p5 <- t2_estimates("e_campaign4_exposure_migrants")
+  p6 <- t2_estimates("e_campaign5_exposure_hardwork")
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Campaigning\n Exposure\n Index \n(1)",
+      "Basti\nVisits by\n Politicians \n(2)",
+      "Home Visit\n by Politician or\n Party Worker  \n(3)",
+      "Number\n of\n Gifts \n(4)",
+      "Migrant-\n Focused\n Campaigning \n(5)",
+      "Perceived\n Campaign\n Intensity \n(6)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$[-0.96, 3.65]$",
+      "$\\{0, \\ldots, 4\\}$",
+      "$\\{0, 1\\}$",
+      "$\\{0, 1, 2\\}$",
+      "$\\{0, 1\\}$",
+      "$\\{0, 0.33, 0.67, 1\\}$")
+  
+# set caption
+  cap <- 
+    "[Index outcome pre-registered; index component analyses exploratory] T2 experimental results for exposure to campaigning during the 2019 Lok Sabha elections. Campaign exposure index (1) based on whether respondent reports that politicians or party workers (2) visited their basti around the 2019 Lok Sabha election campaign; (3) came to the door to request votes; (4) offered gifts; (5) tried to specifically win votes of recent migrants to the city; (6) campaigned hard to win votes in the basti. Weighted least squares estimates of intent to treat effects. Clusters weighted equally. Models include block fixed effects and individual covariates. Cluster-robust standard errors in parentheses."
+  
+# print table
+  bind_cols(rns2, p1$tab, p2$tab, p3$tab, p4$tab, p5$tab, p6$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+  add_header_above(c("", " ", "Index Components" = 5)) %>% 
+  kable_styling(font_size = 10)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\clearpage
+
+
+\begin{center}
+\Large{\textbf{Overcoming the Political Exclusion of Migrants: Theory and Experimental Evidence from India}}
+\end{center}
+
+\vspace{20pt}
+
+\begin{center}
+\large{\textbf{Nikhar Gaikwad, Columbia University}}
+\end{center}
+
+\begin{center}
+\large{\textbf{Gareth Nellis, University of California, San Diego}}
+\end{center}
+
+\vspace{20pt}
+
+\begin{center}
+\huge{ONLINE APPENDIX}
+\end{center}
+
+\vspace{20pt}
+
+\begin{center}
+\huge{\textit{Note: All references to ``Supplementary Information'' (``SI'') relate to the document, supplementary-information.pdf available at: https://doi.org/10.7910/DVN/G1JCKK}}
+\end{center}
+
+
+\setcounter{page}{0}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\renewcommand{\thefigure}{A\arabic{figure}}
+\renewcommand{\thetable}{A\arabic{table}}
+
+\clearpage
+
+\part*{Online Appendix}
+\addcontentsline{toc}{part}{Online Appendix}
+\localtableofcontents
+
+\clearpage
+
+\section{Voter turnout rates among naturalized immigrants versus native-born citizens globally}
+
+```{r results="asis", fig.show="hold"}
+# Set caption 
+  cap <- 
+    "Average voter turnout rates by natives versus naturalized immigrants, according to the sixth wave of the World Values Survey (2010-14). Turnout percentages are calculated using data from all countries where responses to two questions were gathered: ``Respondent immigrant?'' (1 = yes; 0 = no), and ``Vote in elections?'' (1 = always/usually; 0 otherwise). Included countries are: Algeria, Azerbaijan, Argentina, Armenia, Brazil, Belarus, Chile, Taiwan, Colombia, Cyprus, Estonia, Georgia, Germany, Ghana, Haiti, India, Iraq, Kazakhstan, Jordan, South Korea, Kyrgyzstan, Lebanon, Libya, Malaysia, Mexico, Morocco, Netherlands, New Zealand, Nigeria, Pakistan, Peru, Philippines, Poland, Qatar, Romania, Russia, Rwanda, Singapore, Slovenia, South Africa, Zimbabwe, Sweden, Thailand, Trinidad and Tobago, Tunisia, Turkey, Ukraine, Egypt, United States, Uruguay, Uzbekistan, and Yemen."
+ 
+# print table
+  turnout %>% 
+    select(-country) %>%
+    summarize_all(funs(round(mean(.), 2))) %>% 
+    kable("latex", 
+            booktabs = T, 
+            escape = F,
+            col.names = linebreak(
+              c("Native turnout percent",
+                "Naturalized immigrant turnout percent")),
+              align = rep("l", 2),
+            caption = cap,
+            linesep = "") %>% 
+    kable_styling(font_size = 12, 
+                  latex_options = 
+                      c("scale_down", 
+                      "hold_position")) %>%
+    column_spec(1:2, width = "20em")  
+```
+
+<!-- \clearpage -->
+
+\section{Indian Human Development Survey-II analysis}
+
+In this section we characterize India's migrant population using nationally representative survey data. We do this to shed light on the political behaviors of migrants versus non-migrants, and to assess the extent to which our sample conforms to—or deviates from—the demographic traits of the country's migrant population at large.
+
+Our primary resource for conducting these analyses is the second round of the Indian Human Development Survey (IHDS-II). To our knowledge, IHDS-II is unique among nationally representative surveys in posing both detailed questions about respondents' migration history and asking a battery of questions about political participation. Table \ref{tab:ihds2_variables} gives a full roster of the IHDS-II variables used in the subsequent analyses and notes the manner in which they were recoded, where appropriate.
+
+Note, in what follows, we decompose the IHDS-II sample into rural and urban areas for the purposes of most analysis (according to the primary sampling unit's designation given in the 2011 Census of India). This is based on the presumption that rural areas are overwhelmingly migrant-\textit{sending} regions whereas urban areas are largely migrant-\textit{receiving} regions. In rural areas, we examine differences between households that did and did not report having had a member who engaged in seasonal migration during the past five years (a question directly posed on the survey). In urban areas, defining who is a migrant is more complex. Respondents were asked about the migration history of their “families” and when their family first came to their current town or city of residence. We class as internal migrants those reporting that their families arrived from a different Indian district or state within the past 10 years.
+
+<!-- \clearpage -->
+
+\subsection{Political participation}
+
+Turning to the substantive analysis, we first investigate whether migrants and migrant-sending households participate less in politics than non-migrants. We generate a Political Engagement Index, which sums whether (a) the household respondent reported being a member of a political party, (b) a member of the village panchayat (in rural areas) or ward committee (in urban areas), and (c) whether they reported having attended a panchayat or ward committee meeting within the last year. 
+
+For both urban (Table \ref{tab:ihds2_political_engagement_urban}) and rural (Table \ref{tab:ihds2_political_engagement_rural}) samples, we find strong evidence that migrants and migrant-sending households, respectively, are less likely to be politically engaged than households not involved in migration. 
+
+In Table \ref{tab:ihds2_ses}, we demonstrate in the pooled (rural and urban) data that the migrant/non-migrant participation gap persists after controlling for households' religious affiliation.
+
+While IHDS-II does not ask directly about voting, this analysis significantly adds to the body of evidence suggesting that India's internal migrants are politically disempowered. 
+
+```{r, results='asis'}
+# create inputs
+  m1 <- lm(rec_political_engagement_index ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  m2 <- lm(rec_hh_member_of_party ~ rec_migrant_10y, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  m3 <- lm(rec_hh_panchayat_member ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  m4 <- lm(rec_hh_attended_meeting ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Political \\\\ Engagement \\\\ Index}", 
+      "\\shortstack{Political \\\\ Party \\\\ Member}",
+      "\\shortstack{Ward \\\\ Committee \\\\ Member}",
+      "\\shortstack{Attended \\\\ Ward Committee \\\\ Meeting}")
+
+# print table
+  stargazer(m1, m2, m3, m4, 
+          se = starprep(m1, m2, m3, m4),
+          type="latex",
+          title = "[Exploratory] Are migrant households less politically engaged than non-migrant households in urban areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:ihds2_political_engagement_urban",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_political_engagement_index ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+
+  m2 <- lm(rec_hh_member_of_party ~ rec_hh_has_shortterm_migrant, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+
+  m3 <- lm(rec_hh_panchayat_member ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+
+  m4 <- lm(rec_hh_attended_meeting ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Political \\\\ Engagement \\\\ Index}", 
+      "\\shortstack{Political \\\\ Party \\\\ Member}",
+      "\\shortstack{Panchayat \\\\ Member}",
+      "\\shortstack{Attended \\\\ Panchayat \\\\ Meeting}")
+
+# print table
+  stargazer(m1, m2, m3, m4, 
+          se = starprep(m1, m2, m3, m4),
+          type="latex",
+          title = "[Exploratory] Are migrant-sending households less politically engaged than non-migrant-sending households in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "\\shortstack{Migrant-sending \\\\ household}",
+          header = F,
+          label = "tab:ihds2_political_engagement_rural",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r, results='asis'}
+# prepare data
+  ihds_hh_rural_urban <- 
+    ihds2_clean %>% 
+    filter(rec_urban_area_census11 == 1) %>% 
+    select(rec_political_engagement_index, rec_sc_st, rec_muslim, rec_assets, rec_urban_area_census11, 
+           combined_migrant = rec_migrant_10y) %>% 
+    bind_rows(
+      ihds2_clean %>% 
+      filter(rec_urban_area_census11 == 0) %>% 
+      select(rec_political_engagement_index, rec_sc_st, rec_muslim, rec_assets, rec_urban_area_census11, 
+             combined_migrant = rec_hh_has_shortterm_migrant))
+
+# create outputs
+  m1 <- lm(rec_political_engagement_index ~ 
+             combined_migrant + 
+             rec_muslim + 
+             rec_urban_area_census11, data = ihds_hh_rural_urban)
+  
+# labels
+  labels <-
+    c("Migrant/migrant-sending household",
+      "Muslim",
+      "Urban")
+  
+# print table
+  stargazer(m1,
+          se = starprep(m1),  
+          type="latex",
+          title = "[Exploratory] Are migrant and migrant-sending households less politically engaged than non-migrant households after controlling for religion? Data are from the IHDS-II household-level recode file. Urban and rural samples are pooled. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = "\\shortstack{Political \\\\ Engagement \\\\ Index}",
+          covariate.labels = labels,
+          header = F,
+          label = "tab:ihds2_ses",
+          float.env = "table",
+          notes.label = "")
+```
+
+\clearpage
+
+\subsection{Politician attachments and receipt of government benefits}
+
+We next turn to evaluate the extent to which migrants (in urban areas) and migrant-sending households (in rural areas) are embedded in networks of clientelistic exchange operated by local politicians. To be sure, measuring quid pro quo transactions of material benefits for votes is challenging. To understand how likely it is that households are involved in such transactions, we make use of two sets of questions put to respondents in the IHDS-II survey instrument: acquaintance with local politicians, and income received from government schemes. Our reasoning is that households who are not acquainted with local politicians are unlikely to be able to access state benefits via clientelistic mechanisms, and, from another angle, that those not receiving substantial income from government schemes are unlikely to be involved in a substantial votes-for-benefits exchange relationship with local politicians, who have significant sway over how state resources are allocated. The Acquaintance Index is the average of the four component binary acquaintance measures.
+
+In Tables \ref{tab:ihds2_acquaintance_urban} we observe that migrants in urban India are similarly acquainted with local politicians as are non-migrants, while Table \ref{tab:ihds2_benefits_income_urban} demonstrates that urban migrants are significantly less likely to receive income from state-run schemes. 
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_acquaint_index ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+
+  m2 <- lm(rec_acquaint_pol_in_community ~ rec_migrant_10y, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m3 <- lm(rec_acquaint_pol_out_community ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m4 <- lm(rec_acquaint_party_in_community ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m5 <- lm(rec_acquaint_party_out_community ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))  
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Acquaintance \\\\ Index}", 
+      "\\shortstack{Acquaintance: \\\\ Politician in \\\\ Community}",
+      "\\shortstack{Acquaintance: \\\\ Politician \\\\ Outside \\\\ Community}",
+      "\\shortstack{Acquaintance: \\\\ Party Worker \\\\ in Community}",
+      "\\shortstack{Acquaintance: \\\\ Party Worker \\\\ Outside \\\\ Community}")
+
+# print table
+  stargazer(m1, m2, m3, m4, m5, 
+          se = starprep(m1, m2, m3, m4, m5),
+          type="latex",
+          title = "[Exploratory] Are migrant households less connected to politicians than non-migrant households in urban areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "footnotesize",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:ihds2_acquaintance_urban",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_benefits_income_winsor ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+
+# print table
+  stargazer(m1,
+          se = starprep(m1),
+          type="latex",
+          title = "[Exploratory] Do migrant households receive less income from government schemes than non-migrant households in urban areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = "Winsorized Benefits Income",
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:ihds2_benefits_income_urban",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+Looking at the rural sample, Table \ref{tab:ihds2_acquaintance_rural} shows that migrant-sending households are substantially less likely to have connections with local politicians by comparison with other households. They also receive somewhat less in income from government schemes (see Table \ref{tab:ihds2_benefits_income_rural}). 
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_acquaint_index ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+
+  m2 <- lm(rec_acquaint_pol_in_community ~ rec_hh_has_shortterm_migrant, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+  m3 <- lm(rec_acquaint_pol_out_community ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+  m4 <- lm(rec_acquaint_party_in_community ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+  m5 <- lm(rec_acquaint_party_out_community ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))  
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Acquaintance \\\\ Index}", 
+      "\\shortstack{Acquaintance: \\\\ Politician in \\\\ Community}",
+      "\\shortstack{Acquaintance: \\\\ Politician \\\\ Outside \\\\ Community}",
+      "\\shortstack{Acquaintance: \\\\ Party Worker \\\\ in Community}",
+      "\\shortstack{Acquaintance: \\\\ Party Worker \\\\ Outside \\\\ Community}")
+
+# print table
+  stargazer(m1, m2, m3, m4, m5, 
+          se = starprep(m1, m2, m3, m4, m5),
+          type="latex",
+          title = "[Exploratory] Are migrant-sending households less connected to politicians than non-migrant-sending households in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "footnotesize",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "\\shortstack{Migrant-sending \\\\ household}",
+          header = F,
+          label = "tab:ihds2_acquaintance_rural",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_benefits_income_winsor ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+# print table
+  stargazer(m1,
+          se = starprep(m1),
+          type="latex",
+          title = "[Exploratory] Do migrant-sending households receive less income from government schemes than non-migrant-sending households in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = "Winsorized Benefits Income",
+          covariate.labels = "\\shortstack{Migrant-sending \\\\ household}",
+          header = F,
+          label = "tab:ihds2_benefits_income_rural",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\subsection{Confidence in political institutions}
+
+IHDS-II respondents were asked about their confidence in various political institutions. We see that migrant households in urban areas (Table \ref{tab:ihds2_confidence_urban}) and migrant-sending households in rural areas (Table \ref{tab:ihds2_confidence_rural}) express less confidence in major political institutions than households not involved in migration. In what follows, the Confidence Index is the average of the three component confidence measures.
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_confidence_index ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+
+  m2 <- lm(rec_confidence_in_panchayats ~ rec_migrant_10y, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m3 <- lm(rec_confidence_in_pols ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m4 <- lm(rec_confidence_in_state_gov ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Confidence \\\\ Index}", 
+      "\\shortstack{Confidence: \\\\ Ward Committees}",
+      "\\shortstack{Confidence: \\\\ Politicians}",
+      "\\shortstack{Confidence: \\\\ State Government}")
+
+# print table
+  stargazer(m1, m2, m3, m4, 
+          se = starprep(m1, m2, m3, m4),
+          type="latex",
+          title = "[Exploratory] Do migrant households express less confidence in political institutions than non-migrant households in urban areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:ihds2_confidence_urban",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_confidence_index ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+
+  m2 <- lm(rec_confidence_in_panchayats ~ rec_hh_has_shortterm_migrant, 
+         data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+  m3 <- lm(rec_confidence_in_pols ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+  
+  m4 <- lm(rec_confidence_in_state_gov ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 0))
+    
+# create labels
+  labels <-  
+    c("\\shortstack{Confidence \\\\ Index}", 
+      "\\shortstack{Confidence: \\\\ Panchayats}",
+      "\\shortstack{Confidence: \\\\ Politicians}",
+      "\\shortstack{Confidence: \\\\ State Government}")
+
+# print table
+  stargazer(m1, m2, m3, m4, 
+          se = starprep(m1, m2, m3, m4),
+          type="latex",
+          title = "[Exploratory] Do migrant-sending households express less confidence in political institutions than non-migrant-sending households in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "\\shortstack{Migrant-sending \\\\ household}",
+          header = F,
+          label = "tab:ihds2_confidence_rural",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\subsection{Urban versus rural political participation}
+
+Might migrants' low participation in cities be a consequence of socialization in rural areas, where participation is lower than in cities? As discussed in the main text, aggregate studies of turnout in India have consistently documented that voter turnout is higher in rural areas. Here, we assess whether this pattern is maintained for the broader metric of political participation in the IHDS-II data, and after controlling for salient demographic attributes that might also impact turnout. 
+
+Table \ref{tab:ihds2_political_engagement_ses} presents this analysis. Consistent with expectations, there is clear evidence that political engagement is substantially lower in urban areas. Moreover, this pattern persists after controlling for religion, caste, and household wealth (as captured in the IHDS-II asset index).
+
+```{r, results='asis'}
+# create input
+  m1 <- lm(rec_political_engagement_index ~ rec_urban_area_census11, 
+           data = ihds2_clean)
+
+  m2 <- lm(rec_political_engagement_index ~ rec_urban_area_census11 + rec_muslim + rec_sc_st + rec_assets,
+           data = ihds2_clean)
+
+# labels
+  labels <-
+    c("Urban",
+      "Muslim",
+      "SC/ST",
+      "Asset Index")
+  
+# print table
+  stargazer(m1, m2,
+            se = starprep(m1, m2),
+            type="latex",
+            title = "[Exploratory] Is political participation lower in urban areas than in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+            omit.stat = c("ser", "f", "rsq"),
+            font.size = "small",
+            no.space = T,
+            dep.var.labels = "\\shortstack{Political \\\\ Engagement \\\\ Index}",
+            covariate.labels = labels,
+            header = F,
+            label = "tab:ihds2_political_engagement_ses",
+            float.env = "table",
+            notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\subsection{Documentation}
+
+In order to register to vote, applicants must submit personal identification and proof of residency documentation. Are migrants and migrant-sending households less likely to possess such documents? The IHDS-II survey asks detailed questions about documentation among household members, enabling us to test whether documentation rates fall short among households not engaged in migration. Tables \ref{tab:ihds2_documentation_urban} and \ref{tab:ihds2_documentation_rural} unearth clear evidence of a lag, among migrants in urban areas and migrant-sending households in rural areas respectively. Lack of access to documentation steepens the challenge of going through the bureaucratic registration process for migrants, in line with the paper's central finding.
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_has_proof_residence ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m2 <- lm(rec_has_photo_id ~ rec_migrant_10y, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+
+# create labels
+  labels <- 
+    c("Has Proof of Residence", 
+      "Has Photo ID")
+
+# print table
+  stargazer(m1, m2, 
+          se = starprep(m1, m2),
+          type="latex",
+          title = "[Exploratory] Are migrant households less likely to possess documents than non-migrant households in urban areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:ihds2_documentation_urban",
+          float.env = "table",
+          notes.label = "")
+```
+
+```{r results="asis"}
+# create inputs
+  m1 <- lm(rec_has_proof_residence ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+  
+  m2 <- lm(rec_has_photo_id ~ rec_hh_has_shortterm_migrant, 
+           data = ihds2_clean %>% filter(rec_urban_area_census11 == 1))
+
+# create labels
+  labels <- 
+    c("Has Proof of Residence", 
+      "Has Photo ID")
+
+# print table
+  stargazer(m1, m2, 
+          se = starprep(m1, m2),
+          type="latex",
+          title = "[Exploratory] Are migrant-sending households less likely to possess documents than non-migrant-sending households in rural areas? Data are from the IHDS-II household-level recode file. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "\\shortstack{Migrant-sending \\\\ household}",
+          header = F,
+          label = "tab:ihds2_documentation_rural",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\subsection{Demographic profile}
+
+Finally, we examine the profile of the overall population of households involved in migration compared to households not engaged in migration (either in destination urban areas, as recent migrant households, or in rural sending regions, as migrant-sending households). We find that migrant-engaged households have a similar religious demography to non-migrant households, with comparable shares of Muslims in both groups. Households engaged in migration, however, are more likely to belong to the Scheduled Castes and Tribes and have fewer household assets, on average.  
+
+```{r, results='asis'}
+# stack data for overall demographic profile
+  ihds_hh_rural_urban <- 
+    ihds2_clean %>% 
+    filter(rec_urban_area_census11 == 1) %>% 
+    select(rec_sc_st, rec_muslim, rec_assets, rec_urban_area_census11, combined_migrant = rec_migrant_10y) %>% 
+    bind_rows(
+      ihds2_clean %>% 
+      filter(rec_urban_area_census11 == 0) %>% 
+      select(rec_sc_st, rec_muslim, rec_assets, rec_urban_area_census11, combined_migrant = rec_hh_has_shortterm_migrant))
+
+# models
+  m1 <- lm(rec_muslim ~ combined_migrant + rec_urban_area_census11, data = ihds_hh_rural_urban)
+  
+  m2 <- lm(rec_sc_st ~ combined_migrant + rec_urban_area_census11, data = ihds_hh_rural_urban)
+  
+  m3 <- lm(rec_assets ~ combined_migrant + rec_urban_area_census11, data = ihds_hh_rural_urban)
+
+# create labels
+  labels <- 
+    c("Muslim", 
+      "SC/ST",
+      "Asset Index")
+
+# print table
+  stargazer(m1, m2, m3, 
+          se = starprep(m1, m2, m3),
+          type="latex",
+          title = "[Exploratory] Do migrant- and migrant-sending households differ according to socio-economic status compared to households not engaged in migration? Data are from the IHDS-II household-level recode file. Urban and rural samples are pooled. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = c("Migrant/migrant-sending household", "Urban"),
+          header = F,
+          label = "tab:ihds2_allmigrants_ses",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\section{T1 further information}
+
+\subsection{Official forms}
+
+```{r, echo = F, fig.show="hold", out.width = "50%", fig.cap="Election Commission of India, Form 6."}
+include_graphics(c(pic_form_6_p1, pic_form_6_p2))
+```
+
+```{r, echo = F, fig.show="hold", out.width = "50%", fig.cap="Election Commission of India, Form 7."}
+include_graphics(c(pic_form_7_p1, pic_form_7_p2))
+```
+
+<!-- \clearpage -->
+
+\subsection{Implementation of T1 in the field}
+
+```{r, echo = F, fig.show="hold", out.width = "100%", align = "center", fig.cap="Photographs of field workers assisting T1-assigned migrants in gathering documents and filling in the forms needed to register to vote locally."}
+include_graphics(docform)
+```
+
+```{r, echo = F, fig.show="hold", out.width = "100%", align = "center", fig.cap="Pictures of the local election offices where applications to register to vote are evaluated and processed."}
+include_graphics(offices)
+```
+
+```{r, echo = F, fig.show="hold", out.width = "100%", align = "center", fig.cap="Successful applicants hold up their newly minted voter ID cards, enabling them to vote locally."}
+include_graphics(vid)
+```
+
+<!-- \clearpage -->
+
+\section{Political parties and migrant outreach}
+
+Are political parties in our study cities less likely to engage with migrants than with long-term city residents in typical elections? To address this question, we obtained proprietary data from the Centre for Developing Societies (CSDS), which conducted a representative poll of Delhi citizens following the 2015 state assembly elections there. The survey was unique in that it elicited detailed information about interactions with party workers in the lead-up to the election, broken down by political party. Specifically, the survey instrument asked: “Did any candidate, party worker or canvasser come to your house during the campaign to ask for your vote?” If the respondent answered in the affirmative, they were then asked, “Candidates or workers of which party came to you?” (they were able to list up to two parties). Respondents were additionally asked, “For how many years have you been living in Delhi?” with four response options provided. We employ the definition of recent migrants employed in Banerjee and Kumar (2017): those who have been living in Delhi for less than ten years.
+
+We run a simple analysis to estimate whether migrants were less likely to be visited by party canvassers compared to longer-term residents (see Table \ref{tab:party_canvass}). We find strong evidence that this is what occurred. Migrants were 14 percentage points less likely to be visited by a party worker of any stripe---a difference that is qualitatively large and statistically significant. We also examine differences in visits by the various parties. The effects are negatively signed for visits by canvassers from all the major parties, but are largest and statistically significant for those campaigning on behalf of the BJP.
+
+These results lend credence to the claim that political parties are less likely to engage in outreach to migrant citizens, plausibly on account of their greater uncertainty about migrants' political preferences.
+
+```{r, results='asis'}
+# create models
+  m1 <- lm(party_canvasser_visited ~ 
+             migrated_in_last_0_9_years, 
+           data = del_2015_clean)
+
+  m2 <- lm(canvasser_aap ~ 
+             migrated_in_last_0_9_years, 
+           data = del_2015_clean)
+  
+  m3 <- lm(canvasser_bjp ~ 
+             migrated_in_last_0_9_years, 
+           data = del_2015_clean)
+  
+  m4 <- lm(canvasser_congress ~ 
+             migrated_in_last_0_9_years, 
+           data = del_2015_clean)
+  
+# labels
+  labels <-
+    c("\\shortstack{Party \\\\ Canvasser \\\\ Visited}",
+      "\\shortstack{AAP \\\\ Canvasser}",
+      "\\shortstack{BJP \\\\ Canvasser}",
+      "\\shortstack{INC \\\\ Canvasser}")
+  
+# print table   
+  stargazer(m1, m2, m3, m4,
+          se = starprep(m1, m2, m3, m4),
+          type="latex",
+          title = "Canvassing visits to recent migrants versus long-term city residents in Delhi during the 2015 Delhi state assembly elections. Survey data were obtained from the Centre for the Study of Developing Societies and are described at: bit.ly/3nCrACa. Bivariate OLS analysis with robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = labels,
+          covariate.labels = "Migrant",
+          header = F,
+          label = "tab:party_canvass",
+          float.env = "table",
+          notes.label = "")
+```
+
+<!-- \clearpage -->
+
+\section{T2 further information}
+
+```{r, echo = F, fig.show="hold", fig.align="center", out.width = "70%", fig.cap="Example of typed letter mailed to local politicians in the lead up to the 2019 elections in T2 treated clusters. For confidentiality, identifying content is redacted and the referenced map is omitted."}
+include_graphics(c(t2letter))
+```
+
+<!-- \clearpage -->
+
+```{r, echo = F, fig.show="hold", fig.align="center", out.width = "70%", fig.cap="Example of email sent to local politicians in the lead up to the 2019 elections in T2 treated clusters. For confidentiality, identifying content is redacted and the referenced map is omitted."}
+include_graphics(c(t2email))
+```
+
+<!-- \clearpage -->
+
+```{r, echo = F, fig.show="hold", fig.align="center", out.width = "70%", fig.cap="Example of WhatsApp message sent to local politicians in the lead up to the 2019 elections in T2 treated clusters. For confidentiality, identifying content is redacted."}
+include_graphics(c(t2whatsapp))
+```
+
+```{r, echo = F, fig.show="hold", fig.align="center", out.width = "100%", fig.cap="Flow diagram of T2 randomization blocks. Clusters (polling stations) are assigned to T2 treatment or control within four blocks."}
+include_graphics(c(t2blockdesign))
+```
+
+\clearpage
+
+\section{Study timeline}
+
+```{r fig.cap="Study phasing. Red and green bars show the timing of the surveys. Blue bars show the timing of final voter registration application decisions, as reported in online administrative data."}
+# timeline figure
+  submitted_dates <- 
+    t1_experiment_df %>% 
+    select(d_decision) %>% 
+    filter(!is.na(d_decision)) %>% 
+    filter(d_decision<18050)
+
+# dataframe  
+  dat <- 
+    data.frame(
+    type = rep(c("Baseline", "T1 Form Accepted/Rejected", "Endline"), 
+               times = c(nrow(t1_experiment_df), 
+                         nrow(submitted_dates), 
+                         nrow(t1_experiment_df))),
+    Date_of_Onset = c(as.Date(t1_experiment_df$b_newdate, origin = "1970-01-01"),
+                      as.Date(submitted_dates$d_decision, origin = "1970-01-01"),
+                      as.Date(t1_experiment_df$e_newdate, origin = "1970-01-01")))
+
+# plot  
+  ggplot(dat , aes(x=Date_of_Onset, group=type, fill=type)) +
+   stat_bin(colour="black", binwidth=2, alpha=0.5, position="identity") + 
+   theme_bw() +
+   xlab("")+
+   ylab("Number of cases") +
+   scale_x_date(breaks=date_breaks("1 month"), labels=date_format("%b %y")) +
+   annotate("rect", xmin = as.Date("2018-10-25"), xmax = as.Date("2019-03-20"), ymin = 0, ymax = Inf, alpha = .2) + 
+   geom_text(aes(x=as.Date("2018-11-01"), label="T1 intervention", y=250), 
+             colour="black", 
+             angle = 90, 
+             text=element_text(size=11)) +
+   geom_text(aes(x=as.Date("2019-04-10"), label="T2 intervention", y=250), 
+             colour="black", 
+             angle = 90, 
+             text=element_text(size=11)) +
+   geom_vline(xintercept = as.Date("2019-05-25"), colour="black", linetype = "dashed") +
+   geom_text(aes(x=as.Date("2019-05-18"), label="Delhi elections", y=100), 
+              colour="black", 
+              angle=90, 
+              text=element_text(size=11)) +  
+   geom_vline(xintercept = as.Date("2019-05-06"), colour="black", linetype = "dashed") +
+   geom_text(aes(x=as.Date("2019-04-29"), label="Lucknow elections", y=100), 
+              colour="black", 
+              angle=90, 
+              text=element_text(size=11)) +
+   scale_y_continuous(limits=c(0, 300), expand = c(0, 0)) + 
+   annotate("rect", xmin = as.Date("2019-04-01"), xmax = as.Date("2019-05-11"), ymin = 0, ymax = Inf, alpha = .2) + 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          legend.title = element_blank(), 
+          legend.position = "bottom")
+```
+
+\clearpage
+
+\section{Indexing}
+
+```{r results="asis"}
+# print table
+  indexes %>%
+  select(`Variable type`, 
+         `Indexed variable label`,
+         `Component variable labels`,
+         `Method of indexing`) %>% 
+    kable("latex", 
+          booktabs = T, 
+          escape = T,
+          col.names = linebreak(
+            c("Variable type", 
+              "Indexed variable label", 
+              "Component variable labels",
+              "Method of indexing"), 
+              align = "l"),
+          caption = "Index construction. Z-score indexes are constructed by coding component variables such that higher values are more beneficial. Component variables are then centered and standardized using the control group mean. The final index is then the average of the standardized components.",
+          linesep = "") %>% 
+  column_spec(3, width = "15em") %>%
+  kable_styling(latex_options = c("scale_down", 
+                                  "hold_position", 
+                                  "striped",
+                                  "repeat_header"), 
+                font_size = 9)
+```
+
+\clearpage
+
+\section{Outliers in `income` covariate}
+
+When cleaning the data we observed several extreme outliers in the `income` covariate. To minimize the influence of these extreme values, we winsorize the variable, setting all values above the value of the 99th percentile to the value of the 99th percentile itself. The transformed variable is used in all statistical analyses.
+
+```{r fig.cap="Box plots show the distribution of the raw income covariate before and after winsorizing.", fig.height = 3, fig.width=3}
+# print plot of original and winsorized income variable
+  t1_experiment_df %>% 
+    select(b_income_000, b_income_000_OUTLIER_FIXED) %>% 
+    pivot_longer(
+      cols = c("b_income_000", "b_income_000_OUTLIER_FIXED"),
+      values_to = "count") %>% 
+    ggplot(aes(x = factor(name), y = count, fill = factor(name)))+
+    geom_boxplot() +
+    labs(xlab = "") +
+    scale_fill_grey() + 
+    scale_color_grey() +
+    theme_bw() +  
+    theme(legend.position="none") + 
+    scale_x_discrete(labels = c("Original", "Winsorized")) +
+    xlab("") +
+    ylab("Income (000s INR)")
+```
+
+\clearpage
+
+\section{Internal validity}
+
+\subsection{Balance}
+
+```{r results="asis"}
+# decalare variables and labels for balance test
+  names <-
+      list(
+    # experimental covariates
+      "b_female" = "Female",
+      "b_age" = "Age",
+      "b_muslim" = "Muslim",
+      "b_sc_st" = "SC/ST",
+      "b_primary_edu" = "Primary education",
+      "b_income_000_OUTLIER_FIXED" = "Income (INR 000s)",
+      "b_married" = "Married",
+      "b_length_residence" = "Length of residence in city",
+      "b_owns_home" = "Owns home in city",
+  
+    # lagged DVs
+      "b_not_voted_previously" = "Hadn't voted previously",
+      "b_vote_mc_elecs_how_likely" = "How likely to vote in city if registered",
+      "b_political_interest" = "Political interest",
+      "b_political_efficacy" = "Sense of political efficacy",
+      "b_political_trust" = "Political trust index",
+      "b_inter_ethnic_tolerance_meal" = "Shared meal with non-coethnic",
+    
+    # summary variables
+      "b_has_village_voter_id" = "Has hometown voter ID",
+      "b_pol_active_village" = "Returned to vote in hometown",
+      "b_more_at_home_village" = "More at home in hometown",
+      "b_kms_to_home" = "Straight-line distance to home district",
+      "b_still_gets_village_schemes" = "Still receives hometown schemes",
+      "b_owns_village_property" = "Owns hometown property")    
+
+# run regression
+  t1bal2 <- 
+    lm(as.formula(paste("i_t1 ~", paste(c(names(names)), collapse = "+"))),
+       data = t1_experiment_df, subset = i_attrition==0)
+
+# compute F statistic  
+  Pr_F <- 
+    format(round((linearHypothesis(t1bal2, paste0(c(names(names)), " = 0")))$`Pr(>F)`[2], 3), 3)
+
+# print table  
+  stargazer(t1bal2, 
+            se = starprep(t1bal2), 
+            type='latex',
+            title = "T1 balance test for subjects included in T1 analyses. OLS regression. All covariates are measured at baseline. Robust standard errors in parentheses.",
+            dep.var.labels = "T1 treatment indicator",
+            single.row = TRUE,
+            covariate.labels = c(unlist(names, use.names=FALSE)),
+            omit = "Constant",
+            omit.stat = c("ser", "f", "rsq"),
+            add.lines = list(c("Pr(>F) of H0: joint orthogonality", paste0(Pr_F))),
+            font.size = "small",
+            header = FALSE,
+            float.env = "table",
+            notes.label = "")
+```
+
+<!-- \clearpage -->
+
+```{r results="asis"}
+# declare balance variables and labels
+  names <-
+    list(
+      # experimental covariates
+        "b_politician_visits" = "Politician visits",
+        "b_female" = "Female",
+        "b_age" = "Age",
+        "b_muslim" = "Muslim",
+        "b_sc_st" = "SC/ST",
+        "b_primary_edu" = "Primary education",
+        "b_income_000_OUTLIER_FIXED" = "Income (INR 000s)",
+        "b_married" = "Married",
+        "b_length_residence" = "Length of residence in city",
+        "b_owns_home" = "Owns home in city")
+
+# run balance regression
+  t2bal <- 
+    felm(as.formula(paste0("i_t2_treat ~ ", paste(c(names(names)), collapse = "+"), "| i_t2_block | 0 | i_t2_cluster")), 
+         data = t2_experiment_df, 
+         weights = t2_experiment_df$i_t2_weight)
+
+# grab f statistic  
+  Pr_F <- 
+   format(round(summary(t2bal)$P.fstat[4], 3), 3) 
+
+# print table  
+  stargazer(t2bal,
+            type='latex',
+            title = "T2 balance test for subjects included in T2 analyses. Weighted least squares regression. Clusters weighted equally. Model includes block fixed effects. All covariates are measured at baseline. Cluster-robust standard errors in parentheses.",
+            dep.var.labels = "T2 treatment indicator",
+            single.row = TRUE,
+            covariate.labels = c(unlist(names, use.names=FALSE)),
+            omit.stat = c("ser", "f", "rsq"),
+            add.lines = list(c("Pr(>F) of H0: joint orthogonality", paste0(Pr_F)),
+                             c("No. of clusters", "87")),
+            font.size = "small",
+            header = FALSE,
+            float.env = "table",
+            notes.label = "") 
+```
+
+\clearpage
+
+\subsection{Attrition rates by treatment condition}
+
+```{r results="asis"}
+# T1 attrition analysis (rates by condition)
+  t1attr1 <- 
+    lm(i_attrition ~ i_t1, 
+       data = t1_experiment_df)
+
+# print the table
+  stargazer(t1attr1, 
+            se = starprep(t1attr1), 
+            type='latex',
+            title = "Comparison of attrition rates across T1 treatment arms using OLS regression. The analysis includes all subjects randomized to T1 treatment or control. Robust standard errors in parentheses.",
+            dep.var.labels = "Attrition Indicator",
+            single.row = TRUE,
+            omit.stat = c("ser", "f", "rsq"),
+            omit = c("Constant"),
+            covariate.labels = "Assigned to T1 treatment",
+            font.size = "small",
+            header = FALSE,
+            float.env = "table",
+            notes.label = "")
+```
+
+```{r results="asis"}
+# T2 attrition analysis (imbalance)
+  t2att <- 
+    felm(i_attrition ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster, 
+         data = t2_experiment_df_w_attritors, 
+         weights = t2_experiment_df_w_attritors$i_t2_weight_w_attritors)
+
+# print the table
+  stargazer(t2att,
+            type='latex',
+            title = "Comparison of attrition rates across T2 treatment arms using weighted least squares regression. Clusters are weighted equally. Models include block fixed effects. The analysis includes all subjects randomized to T2 treatment or control. (Note that this number is smaller than that for the T1 attrition analysis as baseline geo-coordinates were unavailable for some subjects; hence they were not assigned to clusters or randomized.) Cluster-robust standard errors in parentheses.",
+            dep.var.labels = "Attrition Indicator",
+            single.row = TRUE,
+            omit.stat = c("ser", "f", "rsq"),
+            covariate.labels = "Assigned to T2 treatment",
+            add.lines = list(c("No. of clusters", "87")),
+            font.size = "small",
+            header = FALSE,
+            float.env = "table",
+            notes.label = "")
+```
+
+\clearpage
+
+# Administrative data on T1 application processing
+
+Because our field team helped applicants to submit the voter registration forms online, we were able to track the progress of each submitted case. Specifically, the Election Commission's online portal provides the dates that applications were received and assigned to a Booth Level Officer (BLO). It also gives the final date when the application was either accepted or rejected. (No reasons are given for rejection.) In Figure \ref{fig:t1_admin_hist}, we present histograms of the time lapse for each of these various stages, as well as the median times.
+
+```{r, fig.cap="\\label{fig:t1_admin_hist}This figure displays the distributions of the time elapsed between the application submission dates and various stages in the application processing, as reported in the online portal of the Election Commission of India. The sample is for experimental subjects assigned to T1 who submitted applications. Red vertical lines display the median value. Note, cases that took longer than 200 days to process are excluded."}
+# labels
+  barfill <- 
+    "#4271AE"
+  
+  barlines <- 
+    "#1F3552"
+
+# make hist
+  p1 <- 
+    ggplot(admin_del_luc_clean, aes(x = time_to_decision)) +
+    geom_histogram(aes(y = ..count..), binwidth = 5, colour = barlines, fill = barfill) + 
+    theme_bw() + 
+    xlab("(a) Time to decision") +
+    geom_vline(xintercept=median(admin_del_luc_clean$time_to_decision, na.rm = T), lwd=1, linetype=2, color="red") +
+    ylab("") + scale_x_continuous(limits=c(0, 200)) + scale_y_continuous(limits=c(0, 160))
+    
+  p2 <- 
+    ggplot(admin_del_luc_clean, aes(x = time_to_appoint)) +
+    geom_histogram(aes(y = ..count..), binwidth = 5, colour = barlines, fill = barfill) + 
+    theme_bw() + 
+    xlab("(b) Time to appoint BLO") +
+    geom_vline(xintercept=median(admin_del_luc_clean$time_to_appoint, na.rm = T), lwd=1, linetype=2, color="red") +
+    ylab("") + scale_x_continuous(limits=c(0, 200)) + scale_y_continuous(limits=c(0, 160))
+  
+  p3 <- 
+    ggplot(admin_del_luc_clean, aes(x = time_to_success)) +
+    geom_histogram(aes(y = ..count..), binwidth = 5, colour = barlines, fill = barfill) + 
+    theme_bw() + 
+    xlab("(c) Time to success") +
+    geom_vline(xintercept=median(admin_del_luc_clean$time_to_success, na.rm = T), lwd=1, linetype=2, color="red") +
+    ylab("") + scale_x_continuous(limits=c(0, 200)) + scale_y_continuous(limits=c(0, 160))
+  
+  p4 <- 
+    ggplot(admin_del_luc_clean, aes(x = time_to_reject)) +
+    geom_histogram(aes(y = ..count..), binwidth = 5, colour = barlines, fill = barfill) + 
+    theme_bw() + 
+    xlab("(d) Time to reject") +
+    geom_vline(xintercept=median(admin_del_luc_clean$time_to_reject, na.rm = T), lwd=1, linetype=2, color="red") +
+    ylab("") + scale_x_continuous(limits=c(0, 200)) + scale_y_continuous(limits=c(0, 160))
+
+# print histograms
+  ggarrange(p1, p2, p3, p4,
+            ncol = 2, nrow = 2)
+```
+
+\clearpage
+
+# Deviations from pre-analysis plan
+
+The study pre-analysis plan (PAP) was filed at the Evidence in Governance and Politics registry before the researchers accessed the endline data and prior to any data analysis being conducted. There were two deviations from the pre-registered plan. First, the observational data analyses described on pp. 6--7 of the PAP were not implemented as there was insufficient variation in the outcome variable of interest (whether eligible subjects wished to acquire a city-based voter ID card) to make these tests feasible. This substantive finding is highlighted in the paper. Second, in the endline data, there were 38 missing values for the variable, `e_campaign5_exposure_hardwork`. This is one of five variables used in the construction of the index variable, `e_campaign_exposure`. For the purposes of constructing this index variable, the 38 missing values of `e_campaign5_exposure_hardwork` were imputed by sampling at random from the non-missing values of that variable within the cluster (polling station) to which the respondent belonged. 
+
+All remaining pre-registered experimental analyses in this paper are implemented in conformity with the PAP. 
+
+<!-- \clearpage -->
+
+# Additional ethical considerations
+
+In this section, we detail features of our experimental design and implementation that went above and beyond the minimal requirements needed to secure Institutional Review Board (IRB) approval. We note that exceeding IRB requirements has long been advocated by ethicists in the discipline (e.g. Tolleson-Rinehart 2008; Yanow and Schwartz-Shea 2008; Teele 2014; Fujii 2012), and indeed, we heeded the general principles outlined in existing guidelines when designing our research study. Below, we outline additional ways in which we sought to conduct our study to the highest ethical standards, highlighting several pieces of scholarship that influenced our research design and fieldwork. 
+
+First, there is an emerging consensus among political scientists that experiments fielded in the midst of an election should be designed to minimize the possibility of swaying aggregate electoral outcomes (e.g. which candidate or party ultimately wins a seat; see Desposato 2014). The American Political Science Association's "Principles and Guidance for Human Subjects Research" notes that, "in general, political science researchers should not compromise the integrity of political processes for research purposes without the consent of individuals that are directly engaged by the research process" (13). In an important recent contribution, Slough (2020) develops a formal model that yields the following recommendations for researchers seeking to abide by this principle. These include: keeping the number of experimental subjects---i.e. voters---comparatively small; avoiding races whose margin of victory is expected to be close; fielding experiments in larger districts where single-member simple plurality rules are in force; and crafting interventions that reduce the chances of spillovers (Slough 2020: 32-3). As noted in the main text, our interventions were situated and implemented to make it highly improbable that any overall electoral results would be affected, in line with these proposals.
+
+Second, a number of prominent ethical guidance documents underscore the importance of partnering with local stakeholders. In particular, the American Political Science Association's "Principles and Guidance for Human Subjects Research” recommends that “researchers should consider the broader social impacts of the research process when deciding whether to engage in the partnership" (13). Humphreys (2015: 89) notes that "the key idea is that if an intervention is ethical for implementing agencies with respect to the ethical standards of their sphere---which may differ from the ethical standards of researchers---then responsibility may be divided between researchers and implementers, with research ethics standards applied to research components and partner standards applied to manipulations." As described in the paper, we partnered with a local NGO that had been working to promote city-based voter registration among urban migrants for several years. This NGO took the lead role in designing and piloting the interventions, engaging with community leaders, offering contextual input on the design of the study, and providing training assistance and materials to help bring the intervention to scale. Training materials, along with field protocols, were reviewed and approved by the researchers to ensure adherence to ethical and scientific best practices. We further relied on the services of a locally-based research firm that had extensive experience working in the cities where the interventions occurred. It is important to emphasize that our NGO partner, as well as a host of other similar organizations (many of which we consulted in the design of our study), was already conducting similar interventions and would have continued to conduct similar interventions with or without our collaboration. In short, our role as academics in the research partnership was to scientifically evaluate an intervention that was already in existence.
+
+Third, Asiedu et al (2021) call attention to what they term "policy equipoise," based on the clinical principle that "the expert community must not have certainty that any arm in a trial is better therapeutically than any other arm." They note that in settings where there is not uncertainty about which arm will achieve normatively desirable results compared to another arm, randomization of an intervention may still be ethical on certain grounds, such as scarcity of intervention supply. We approached our experimental design with these principles in mind. There was considerable uncertainty regarding the efficacy of both interventions. Additionally, given the resource-intensive nature of the voter registration intervention as well as the budget constraints facing us and our partners, in no sense were we withholding registration resources that would otherwise have been allocated to subjects in the comparison group.
+
+Fourth, we were closely attuned to the treatment of our field teams as well as the imperative to engage in "knowledge transfers" to local populations (cf. Teele 2014). Based on extensive scoping and piloting, we established that the communities where we were working were substantially safe environments in which to carry out research, entailing no appreciable risk to field workers. On knowledge and skills transfers, we were able to enlist the support of research assistance from graduate students at a local university; the students used fieldwork on the project to fulfill one of the requirements for their masters degree program. Field teams were overseen by a professional project manager and compensated at standard local rates for such fieldwork. 
+
+Finally, our research was designed to be policy-relevant. Highlighting the growing policy impact of much social scientific work, Tolleson-Rinehart (2008: 507-8) notes that "how the knowledge of such improvements can be shared ... is increasingly urgent." To boost the overall benefits of experimental research, the broad and proactive dissemination of research findings is critical. For example, Cronin-Furman and Lake (2018: 612) encourage researchers to ask: "Have you made a plan to ensure that your research results are disseminated back to the affected community in ways that are meaningful or valuable to them?" In keeping with this recommendation, we will publicize the results of our study to a wide policy audience---including NGO actors working on migrant advocacy, in addition to bureaucrats at the front lines of electoral administration, for whom our study may hold lessons.
+
+\noindent Works referenced:
+
+* American Political Science Association Council's “Principles and Guidance for Human Subjects Research.” bit.ly/3bId74R. Accessed 3/13/2021.
+* Asiedu, E., Karlan, D., Lambon-Quayefio, M., and Udry, C. 2021. “A Call for Structured Ethics Appendices in Social Science Papers.” National Bureau of Economic Research Working Paper 28393. bit.ly/38Eh74J.
+* Cronin-Furman, K. and Lake, M. 2018. “Ethics Abroad: Fieldwork in Fragile and Violent Contexts.” PS: Political Science and Politics 51(3): 607-14.
+* Desposato, Scott. 2014. “Ethical Challenges and Some Solutions for Field Experiments.” Mimeo, University of California, San Diego. bit.ly/3lbtzOq.
+* Fujii, L. 2012. “Research Ethics 101: Dilemmas and Responsibilities.” PS: Political Science and Politics 45(4): 717-23.
+* Humphreys, M. 2015. “Reflections on the Ethics of Social Experimentation.” Journal of Globalization and Development 6(1): 87-112.
+* Slough, T. 2020. “The Ethics of Electoral Experimentation: Design-Based Recommendations.” Mimeo, Columbia University. bit.ly/3bDfiqy. 
+* Tolleson-Rinehart, Sue. 2008. “A Collision of Noble Goals: Protecting Human Subjects, Improving Health Care, and a Research Agenda for Political Science.” PS: Political Science and Politics 41(3): 507-11.
+* Teele, D. 2014. “Reflections on the Ethics of Field Experiments.” In D. Teele (ed.), Field experiments and their Critics: Essays on the Uses and Abuses of Experimentation in the Social Sciences, Yale University Press, 115-40.
+* Wood, E. 2007. “Field Research.” In C. Boix and S. Stokes (eds.), The Oxford Handbook of Comparative Politics, Oxford University Press: 123-46.
+* Yanow, D. and Schwartz-Shea, P. 2008. “Reforming Institutional Review Board Policy: Issues in Implementation and Field Research.” PS: Political Science and Politics 41(3): 483-94.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\clearpage
+
+\setcounter{section}{0}
+
+\begin{center}
+\Large{\textbf{Overcoming the Political Exclusion of Migrants: Theory and Experimental Evidence from India}}
+\end{center}
+
+\vspace{20pt}
+
+\begin{center}
+\large{\textbf{Nikhar Gaikwad, Columbia University}}
+\end{center}
+
+\begin{center}
+\large{\textbf{Gareth Nellis, University of California, San Diego}}
+\end{center}
+
+\vspace{20pt}
+
+\begin{center}
+\huge{SUPPLEMENTARY INFORMATION}
+\end{center}
+
+\setcounter{page}{0}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\renewcommand{\thefigure}{SI\arabic{figure}}
+\renewcommand{\thetable}{SI\arabic{table}}
+
+\newpage
+
+\part*{Supplementary Information}
+\addcontentsline{toc}{part}{Supplementary Information}
+\localtableofcontents
+
+\clearpage
+
+
+\begin{landscape}
+
+\section{Voter registration procedures worldwide}
+
+```{r results="asis"}
+# print table
+  voter_reg %>% 
+    mutate(population = format(as.numeric(population), nsmall = 0, big.mark = ","),
+           gdppc = format(round(gdppc, digits = 0), big.mark = ",")) %>% 
+    kable("latex",
+          booktabs = T,
+          escape = F,
+          longtable = T, 
+          col.names = linebreak(c(
+            "Country", 
+            "Population (2018)", 
+            "GDP per capita (USD, 2018)", 
+            "Polity Score (2018)", 
+            "Voter registration procedure", 
+            "Post-migration procedure"), 
+            align = "l"),
+          caption = "Description of voter registration rules in the 20 most populous low- and middle-income democracies. We class countries as democratic if their Polity IV score was 6 or greater in 2018. Per the World Bank, low- and middle-income countries are those whose GDP per capita was less than USD 12,375 in 2018. Population and income data are from the World Bank. Information on registration procedures were gathered from official government sources and country experts.",
+          linesep = "") %>%
+    kable_styling(font_size = 9,
+                  latex_options = 
+                    c("scale_down", 
+                    "hold_position", 
+                    "striped", 
+                    "repeat_header"),
+                  repeat_header_text = "(\\textit{continued}) Description of voter registration rules in the 20 most populous low- and middle-income democracies.", 
+                  repeat_header_method = "replace") %>%  
+    column_spec(1, width = "5em") %>%
+    column_spec(2, width = "6em") %>%
+    column_spec(3:4, width = "3em") %>% 
+    column_spec(5:6, width = "18em")
+```
+
+\end{landscape}
+
+\clearpage
+
+\section{Internal migration and political participation worldwide: Additional case-study evidence}
+
+Qualitative evidence corroborates the claim that internal migrants tend to participate less, politically, than non-migrants in a variety of settings worldwide.
+
+* **Nigeria**: Akinyemi, A., Olaopa, O., and Oloruntimehi, O. 2005. "Migration Dynamics and Changing Rural-Urban Linkages in Nigeria." Mimeo: Obafemi Awolowo University. bit.ly/3wTi1Vr.  
+    + This study details low rates of political participation among migrants in Oyo, Ondo, and Ogun states: “Migrants' participation in political activities showed that 30% of males vs 15% of females among migrants participate and belong actively to a political party” (p. 11).
+    
+* **Ukraine**: National Democratic Institute. 2019. “Statement of the NDI Election Observation Mission to Ukraine's April 21, 2019 Second Round Presidential Election.” bit.ly/2WVgPzt.   
+    + This report notes: “Labor migrants ... face particular barriers to voting. Internal migrants and IDPs must apply each election---including both rounds of the presidential election---to change their place of voting. Citizens residing in non-government-controlled areas must cross the ‘line of contact' multiple times to vote in a government-controlled location, creating both a financial and physical burden. The process is cumbersome and poorly understood. OPORA [Ukrainian civic network] and others have recommended an online system to ease the process for all types of internal migrants. Some 325,604 citizens, just a small fraction of Ukraine's internal migrants and IDPs, changed their place of voting for the second round” (p. 7).
+    
+* **Colombia**: Rozo, S., and Vargas, J. 2018. “Brothers or Invaders? How Crisis-Driven Migrants Shape Voting Behavior.” The Latin American and Caribbean Economic Association 16836. bit.ly/2LIOqea.   
+    + This paper notes that “internally displaced populations in Colombia, while entitled to vote, do not do so in practice. This is both because most internal migrants are below the voting age ... and because many of the adults lack formal identification documents which are required for voting” (p. 16).
+    
+* **Myanmar**: Callahan, M., and Oo, M. 2019. “Myanmar's 2020 Elections and Conflict Dynamics.” United States Institute of Peace. \textit{Peaceworks} No. 146. bit.ly/2Z11zUI.  
+    + This study notes that “for voter list inclusion, much hinges on the possession of an up-to-date household list. If a voter checks the voter list display and finds her name missing, she has to produce her household list or other form of identification to demonstrate residence in that particular constituency. If—as is the case for Myanmar's many internal migrants—she is on a household list in another constituency, she must return to the local administrative office in that location, apply to remove her name from the household list there, and then return to her present constituency area to apply to have her name placed on the household list there. Once that requirement has been satisfied, the GAD [General Administration Department] at the ward or village level will transmit the information to the election commission to add her name to the voter list. This is an onerous and—for some—expensive process that disincentivizes self-updating of the voter list. Election observers noted that separate from this process, village development committees could confirm the residence and identity of potential voters to add their names to the voter list. As the EU Observation Mission noted, this `trust-based approach' did not serve internally displaced people well, as they are living far from their villages” (pp. 26-27). 
+
+\clearpage
+
+
+\section{Voter registration field experiments: A systematic review}
+
+We systematically review the body of published field experimental studies on the impacts of voter registration assistance. We note that no published study to date has focused on the specific challenges that migrants encounter in seeking to enroll. Additionally, few studies probe the downstream effects of voter registration on other indicators of political incorporation (yet see Braconnier et al 2017 for an important exception). 
+
+Studies focusing on general-population voters have documented mixed effects of voter registration assistance, with treatment impacts varying according to the mode of assistance offered. Compare, for example, Bennion and Nickerson 2010, Bennion and Nickerson 2014, and Nickerson 2007, which identify null and even negative effects of some interventions, with Braconnier et al 2017, Gerber et al 2014, and Nickerson 2015 which identify positive effects. 
+
+Only two studies focus on registration assistance in developing-country contexts. While Harris and van der Windt Forthcoming finds statistically significant positive treatment effects of assistance given in Kenya, Mvukiyehe and Samii 2017 finds no evidence of an impact of town hall meetings or a civic education campaign to promote registration on either registration or turnout in Liberia. 
+
+Finally, we note that there is suggestive evidence in existing work that non-movers and movers respond differentially to registration assistance. Notably, Braconnier et al 2017 finds an overall treatment effect of +0.052 percentage points, p<0.01, for home registration visits; yet compared to registered voters as a whole, subjects who registered because of the treatment were more likely to be immigrants (+0.202 percentage points, p<0.01) and to have been born in another region of France (+0.215 percentage points, p<0.01). Additionally, Gosnell 1926 finds that the treatment effect on registration was greater among the sub-sample of subjects who had lived in that voting precinct for less than 10 years.
+
+\afterpage{
+
+\begin{landscape}
+
+\newpage
+
+```{r, results="asis"}
+# clean
+  lit_review %<>%
+    mutate(Heterogeneity = case_when(is.na(Heterogeneity) ~ "",
+                                     TRUE ~ Heterogeneity))
+
+# print table
+  lit_review %>% 
+    kable("latex",
+          booktabs = T,
+          escape = F,
+          longtable = T, 
+          col.names = linebreak(c(
+            "Study", 
+            "Sample", 
+            "Treatments", 
+            "Outcomes", 
+            "Results", 
+            "Heterogeneity"), 
+            align = "l"),
+          caption = "A systematic review of published field experimental studies of the effects of voter registration assistance.",
+          linesep = "") %>%
+    kable_styling(font_size = 8,
+                  latex_options = 
+                    c("scale_down", 
+                    "hold_position", 
+                    "striped", 
+                    "repeat_header"),
+                  repeat_header_text = "(\\textit{continued}) A systematic review of published field experimental studies of the effects of voter registration assistance.", 
+                  repeat_header_method = "replace") %>%  
+    column_spec(1, width = "10em") %>%
+    column_spec(2:6, width = "12em")
+```
+
+\end{landscape}
+
+}
+
+\afterpage{
+
+\begin{landscape}
+
+\newpage
+
+\section{Description of IHDS-II variables}
+
+```{r, results="asis"}
+# print table
+  ihds2_table %>%
+    mutate(Note = case_when(is.na(Note) ~ "", TRUE ~ Note)) %>%
+    kable("latex", 
+          booktabs = T, 
+          escape = F,
+          longtable = T,
+          col.names = linebreak(
+            c("Variable code",
+              "Variable label",
+              "Question number in IHDS-II",
+              "Question language in IHDS-II",
+              "Note"),
+              align = "l"),
+          caption = "\\label{tab:ihds2_variables}Description of IHDS-II variables.",
+          linesep = "") %>%
+    kable_styling(font_size = 9,
+                      latex_options =
+                        c("scale_down",
+                        "hold_position",
+                        "striped",
+                        "repeat_header"),
+                      repeat_header_text = "(\\textit{continued}) Description of IHDS-II variables.",
+                      repeat_header_method = "replace") %>%
+    column_spec(1, width = "16em") %>%
+    column_spec(2, width = "6em") %>%
+    column_spec(3, width = "7em") %>%
+    column_spec(4, width = "18em") %>%
+    column_spec(5, width = "18em")
+```
+
+\end{landscape}
+
+}
+
+\clearpage
+
+\section{Additional information on experimental subject characteristics}
+
+Table \ref{tab:reason_for_migration} presents the reasons given by experimental subjects for why they migrated to Delhi and Lucknow. A clear majority cited employment as the main reason. Table \ref{tab:migrating_with_family} shows that most migrants migrated with their spouses and children.
+
+Table \ref{tab:state_origins} demonstrates that most migrants in the Lucknow sample were intra-state migrants from other parts of Uttar Pradesh. Most migrants to Delhi came from neighbouring states. (Note that Delhi is effectively a city-state and so all migration is from other states.)
+
+\vspace{2em}
+
+```{r results="asis"}
+# form table  
+  tab_reason_for_migration <- 
+    t1_experiment_df %>%
+    select(i_city, b_reason_for_migration) %>% 
+    bind_rows(t1_experiment_df %>% select(b_reason_for_migration)) %>% 
+    mutate(i_city = replace_na(i_city, "Both cities (full sample)")) %>% 
+    group_by(i_city, b_reason_for_migration) %>% 
+      summarise(count = n()) %>% 
+    ungroup() %>% 
+    group_by(i_city) %>% 
+      mutate(total = sum(count)) %>% 
+    ungroup() %>% 
+      mutate(percent = (count/total)*100) %>%
+    select(i_city, b_reason_for_migration, percent) %>% 
+    pivot_wider(
+      names_from = b_reason_for_migration,
+      values_from = percent)
+
+# Set caption 
+  cap <- 
+    "\\label{tab:reason_for_migration}Main reasons given for migration (in percentages) by T1 experiment subjects."
+  
+# print table
+  tab_reason_for_migration %>% 
+    kable("latex",
+          booktabs = T,
+          col.names = c(
+            "Sample", 
+            "Employment",
+            "Marriage",
+            "Other"),
+          digits = 1,
+          align = c("l", "c", "c", "c"),
+          caption = cap) %>% 
+    kable_styling(
+      position = "center", 
+      latex_options = c("hold_position"))
+```
+
+```{r results = "asis"}
+# vars 
+  vars_to_select <-
+    c("b_resident_family_members_none",
+      "b_resident_family_members_spouse",
+      "b_resident_family_members_children")
+
+# form table 
+  tab_resident_family_members <- 
+    t1_experiment_df %>%
+    select(i_city, vars_to_select) %>%
+    bind_rows(t1_experiment_df %>% select(vars_to_select)) %>%
+    mutate(i_city = replace_na(i_city, "Both cities (full sample)")) %>%
+    group_by(i_city) %>%
+      summarise_at(vars_to_select, mean) %>%
+    ungroup() %>%
+    mutate_if(is.numeric, funs(.*100))
+
+# Set caption 
+  cap <- 
+    "\\label{tab:migrating_with_family}Family accompanying T1 experiment subjects at the time of migration (in percentages)."
+  
+# print table
+  tab_resident_family_members %>% 
+    kable("latex",
+          booktabs = T,
+          col.names = c(
+            "Sample", 
+            "None",
+            "Spouse",
+            "Children"),
+          digits = 1,
+          align = c("l", "c", "c", "c"),
+          caption = cap) %>% 
+    kable_styling(
+      position = "center", 
+      latex_options = c("hold_position"))
+```
+
+```{r, results="asis"}
+# clean state vars
+  tab_state <-
+    t1_experiment_df %>%
+    mutate(same_state = 
+             case_when(
+               (i_city == "Lucknow" & b_state_origin == 28) ~ 1,
+                i_city == "Delhi" ~ NA_real_,
+                TRUE ~ 0),
+           neighboring_state = 
+             case_when(
+               (i_city == "Delhi" & b_state_origin %in% c(8, 28)) ~ 1,
+               (i_city == "Lucknow" & b_state_origin %in% c(4, 5, 8, 11, 14, 22, 27)) ~ 1,
+               TRUE ~ 0)) %>%
+    select(i_city, same_state, neighboring_state)
+
+# create table data  
+  tab_state_origin <-
+    bind_rows((tab_state %>%
+                summarise(same_state = mean(same_state, na.rm=T),
+                          neighboring_state = mean(neighboring_state))), 
+              (tab_state %>%
+                group_by(i_city) %>%
+                summarise(same_state = mean(same_state),
+                          neighboring_state = mean(neighboring_state)))) %>%
+    select(i_city, same_state, neighboring_state) %>%
+    mutate_if(is.numeric, ~round((.*100), 1)) %>%
+    mutate(i_city = case_when(is.na(i_city) ~ "Both cities (full sample)",
+                              TRUE ~ i_city))
+  
+# caption
+  cap <- 
+    "\\label{tab:state_origins}States of origins of sampled migrants."
+  
+# print table
+  tab_state_origin %>% 
+    kable("latex",
+          booktabs = T,
+          col.names = c(
+            "Sample", 
+            "Come from same state",
+            "Come from neighboring state"),
+          digits = 1,
+          align = c("l", "c", "c"),
+          caption = cap) %>% 
+    kable_styling(
+      position = "center", 
+      latex_options = c("hold_position"))
+```
+
+
+\clearpage
+
+\section{Summary statistics}
+
+```{r results="asis"}
+# declare columns and labels
+  names <-
+      list(
+      # experimental outcomes
+        "e_voter_id" = "(E) Has city-based voter ID",
+        "e_voted_2019" = "(E) Voted in city in 2019",
+        "e_vote_future" = "(E) Likelihood of voting in city in future",
+        "e_political_interest" = "(E) Political interest index",
+        "e_political1_interest_city" = "(E) Interest: City politics",
+        "e_political2_interest_nat_state" = "(E) Interest: National/state politics",
+        "e_political_accountability" = "(E) Politician accountability perceptions",
+        "e_political_efficacy" = "(E) Sense of political efficacy",
+        "e_political_trust" = "(E) Political trust index",
+        "e_contacting" = "(E) Contacting city officials index",
+        "e_non_electoral_participation" = "(E) Non-electoral participation index",
+  
+      # experimental indicator
+        "i_t1" = "(B) T1 treatment",
+  
+      # experimental covariates
+        "b_female" = "(B) Female",
+        "b_age" = "(B) Age",
+        "b_muslim" = "(B) Muslim",
+        "b_sc_st" = "(B) SC/ST",
+        "b_primary_edu" = "(B) Primary education",
+        "b_hindi" = "(B) Hindi",
+        "b_income_000_OUTLIER_FIXED" = "(B) Income (INR 000s)",
+        "b_married" = "(B) Married",
+        "b_length_residence" = "(B) Length of residence in city",
+        "b_owns_home" = "(B) Owns home in city",
+  
+      # lagged DVs
+        "b_not_voted_previously" = "(B) Hadn't voted previously",
+        "b_vote_mc_elecs_how_likely" = "(B) How likely to vote in city if registered",
+        "b_political_interest" = "(B) Political interest",
+        "b_political_efficacy" = "(B) Sense of political efficacy",
+        "b_political_trust" = "(B) Political trust index",
+        "b_inter_ethnic_tolerance_meal" = "(B) Shared meal with non-coethnic",
+  
+      # summary variables
+        "b_has_village_voter_id" = "(B) Has hometown voter ID",
+        "b_pol_active_village" = "(B) Returned to vote in hometown",
+        "b_more_at_home_village" = "(B) More at home in hometown",
+        "b_kms_to_home" = "(B) Straight-line distance in kilometers to home district",
+        "b_still_gets_village_schemes" = "(B) Still receives hometown schemes",
+        "b_owns_village_property" = "(B) Owns hometown property")
+
+# keep only selected variables
+  sum_stats_t1 <- 
+    t1_experiment_df %>% 
+      select(names(names)) %>% 
+      mutate_if(~ all(unique(.) %in% c(0:6, NA, NaN)), funs(as.integer)) %>% 
+      as.data.frame()
+
+# print table  
+  capture.output(stargazer(sum_stats_t1, 
+            header = F,
+            float.env = "table",
+            omit.summary.stat = c("p25", "p75"),
+            font.size = "footnotesize",
+            digits = 3,
+            notes.label = "",
+            covariate.labels = c(unlist(names, use.names=FALSE)),
+            title = "Summary statistics for variables used in the analysis of the T1 experiment. ``(E)'' variables were measured at endline and ``(B)'' variables were measured at baseline.")) %>% 
+    gsub(".000", "", .) %>%
+    cat(., sep = "\n")
+```
+
+\clearpage
+
+```{r results="asis"}
+# declare columns and labels
+  names <-
+        list(
+        # experimental outcomes
+          "e_campaign_exposure" = "(E) Campaign exposure index",
+          "e_campaign1_exposure_visits" = "(E) Basti visits by politicians",
+          "e_campaign2_exposure_canvassed" = "(E) Home visit by politician or party worker",
+          "e_campaign3_exposure_gifts" = "(E) Number of gifts",
+          "e_campaign4_exposure_migrants" = "(E) Migrant-focused campaigning",
+          "e_campaign5_exposure_hardwork" = "(E) Perceived campaign intensity",
+          "e_political1_trust_nat_gov" = "(E) Trust: National government",
+          "e_political2_trust_sta_gov" = "(E) Trust: State government",
+          "e_political3_trust_mc_gov" = "(E) Trust: Municipal government",
+          "e_political4_trust_parties" = "(E) Trust: Political parties",
+          "e_social1_integration_city_home" = "(E) Considers city home",
+          "e_social3_integration_plan_to_live" = "(E) Plans to live in city",
+          "e_social4_integration_recommend_live" = "(E) Recommends others live in city",
+  
+        # experimental indicator
+          "i_t2_treat" = "(B) T2 treatment",
+    
+        # experimental covariates
+          "b_politician_visits" = "(B) Politician visits",
+          "b_female" = "(B) Female",
+          "b_age" = "(B) Age",
+          "b_muslim" = "(B) Muslim",
+          "b_sc_st" = "(B) SC/ST",
+          "b_primary_edu" = "(B) Primary education",
+          "b_income_000_OUTLIER_FIXED" = "(B) Income (INR 000s)",
+          "b_married" = "(B) Married",
+          "b_length_residence" = "(B) Length of residence in city",
+          "b_owns_home" = "(B) Owns home in city")
+
+# keep only selected variables
+  sum_stats_t2 <- 
+    t2_experiment_df %>% 
+      select(names(names)) %>% 
+      as.data.frame()
+  
+# print table  
+  capture.output(stargazer(sum_stats_t2, 
+            header = F,
+            float.env = "table",
+            omit.summary.stat = c("p25", "p75"),
+            font.size = "footnotesize",
+            digits = 3,
+            notes.label = "",
+            covariate.labels = c(unlist(names, use.names=FALSE)),
+            title = "Summary statistics for variables used in the analysis of the T2 experiment. ``(E)'' variables were measured at endline and ``(B)'' variables were measured at baseline.")) %>% 
+    gsub(".000", "", .) %>% 
+    cat(., sep = "\n")
+```
+
+
+\clearpage
+
+\section{Survey instruments for experiment}
+
+```{r results="asis"}
+# print table
+  questions %>%
+    select(variable_label, question_text, options) %>% 
+    kable("latex", 
+          booktabs = T, 
+          escape = T,
+          longtable = T,
+          col.names = linebreak(
+            c("Survey / variable name", 
+              "Question text", 
+              "Response options"), 
+              align = "l"),
+          caption = "Variable definitions in the original survey instrument.",
+          linesep = "") %>% 
+  column_spec(1, width = "12em") %>% 
+  column_spec(2, width = "22em") %>%
+  column_spec(3, width = "14em") %>%
+  pack_rows("Baseline survey", 1, 28) %>%
+  pack_rows("Endline survey", 29, 49, latex_gap_space = "2em") %>% 
+  kable_styling(latex_options = c("scale_down", 
+                                  "hold_position", 
+                                  "striped",
+                                  "repeat_header"), 
+                font_size = 9)
+```
+
+\clearpage
+
+# T1 additional results
+
+## T1 interaction with hometown attachment characteristics
+
+We find that 98 percent of subjects in the omnibus sample expressed a wish to receive assistance to register to vote locally, which we take to be evidence against the claim that hometown attachments are consequential for the take up of registration help. Table \ref{tab:t1_interaction_village} further probes the “voluntaristic detachment” theory by examining whether the T1 intervention was less effective among subjects with stronger attachments to home regions. This may have occurred if, say, subjects more attached to home regions declined to invest in the registration process once it got underway. The null interaction coefficients presented in Table \ref{tab:t1_interaction_village} suggest that this is not the case.
+
+```{r results="asis"}
+# estimations
+  h1 <- lm(e_voter_id ~ 
+             i_t1*b_length_residence + 
+             i_t1*b_kms_to_home + 
+             i_t1*b_more_at_home_village + 
+             i_t1*b_still_gets_village_schemes + 
+             i_t1*b_owns_village_property, 
+            data = t1_experiment_df)
+
+  h2 <- lm(e_voted_2019 ~ 
+             i_t1*b_length_residence + 
+             i_t1*b_kms_to_home + 
+             i_t1*b_more_at_home_village + 
+             i_t1*b_still_gets_village_schemes + 
+             i_t1*b_owns_village_property, 
+            data = t1_experiment_df)
+
+# print table
+  stargazer(h1, h2, 
+          se = starprep(h1, h2), 
+          type='latex',
+          label = "tab:t1_interaction_village",
+          title = "[Exploratory] Estimates of heterogeneous effects of T1 treatment by hometown attachment characteristics. Models do not include additional covariates. Robust standard errors in parenthesis.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          float.env = "table",
+          notes.label = "",
+          dep.var.labels = c("Has City-Based Voter ID", "Voted in City in 2019"),
+          order=c("i_t1:b_length_residence", 
+                  "i_t1:b_kms_to_home", 
+                  "i_t1:b_more_at_home_village", 
+                  "i_t1:b_still_gets_village_schemes", 
+                  "i_t1:b_owns_village_property"),
+          covariate.labels = c("T1 x Length of residence",
+                               "T1 x Kilometers to home",
+                               "T1 x More at home at hometown",
+                               "T1 x Still gets hometown schemes",
+                               "T1 x Owns hometown property",
+                               "T1",
+                               "Length of residence",
+                               "Kilometers to home",
+                               "More at home in hometown",
+                               "Still gets hometown schemes",
+                               "Owns hometown property"),
+          header=FALSE)
+```
+
+\clearpage
+
+##  T1 effects on political interest decomposed
+
+```{r results="asis"}
+# t1 table; additional attitudes
+  p1 <- t1_estimates(dv = "e_political1_interest_city", lag = "b_political_interest", cov = T)
+  p2 <- t1_estimates(dv = "e_political2_interest_nat_state", lag = "b_political_interest", cov = T)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Interest:\n City Politics\n (1)", 
+      "Interest:\n National/State Politics\n (2)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$\\{0, 0.5, 1\\}$",
+      "$\\{0, 0.5, 1\\}$")
+
+# set caption
+  cap <- 
+    "[Exploratory] T1 experimental results for political interest, using the two individual components of the political interest index as outcomes. OLS estimates of intent to treat effects. Models include covariates. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T)  %>%
+      kable_styling(latex_options = c("hold_position"))
+```
+
+\clearpage
+
+## T1 effects on contacting and non-electoral participation
+
+Table \ref{tab:t1_effects_on_contact} considers two outcomes not included in our pre-analysis plan, yet that bear on citizens' political engagement beyond elections. Column 1 shows the registration campaign somewhat increased the number of urban politicians subjects report having contacted within the past three months (0.039 additional contacts, p=0.069). Non-electoral participation, too, responded to the treatment, with the count of reported activities increasing by 0.043 (p=0.048; column 2). Both behavioral changes are impressive given the comparatively short timespan of the project. They resonate with a growing body of literature stressing the significance of claims-making in developing country contexts: the need for active citizens to make requests of the state if their welfare needs are to be met. The small absolute magnitudes of the effects are in line with the low control group means. The majority of respondents had neither contacted any city official nor engaged in any non-electoral political activity over the past three months, highlighting the depths of this group's marginalization. 
+
+```{r results="asis"}
+# t1 table, contacting and non-electoral participation
+  p1 <- t1_estimates("e_contacting", cov = T)
+  p2 <- t1_estimates("e_non_electoral_participation", cov = T)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Contacting City\n Officials Index \n(1)", 
+      "Non-Electoral\n Participation Index \n(2)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$\\{0, \\ldots, 6\\}$", 
+      "$\\{0, \\ldots, 5\\}$")
+
+# set caption
+  cap <- 
+    "\\label{tab:t1_effects_on_contact}[Exploratory] T1 experimental results for contacting and non-electoral participation. OLS estimates of intent to treat effects. Models include covariates. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T,
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+      kable_styling(latex_options = c("hold_position"))
+```
+
+\clearpage
+
+## Heterogeneous effects of T1 by Hindi fluency 
+
+```{r, results='asis'}
+# estimations
+  h1 <- lm(e_voter_id ~ 
+             i_t1*b_hindi,
+            data = t1_experiment_df)
+
+  h2 <- lm(e_voted_2019 ~ 
+             i_t1*b_hindi,
+            data = t1_experiment_df)
+
+# print table
+  stargazer(h1, h2, 
+          se = starprep(h1, h2), 
+          type='latex',
+          title = "[Exploratory] Estimates of heterogeneous effects of T1 treatment by Hindi fluency. Models do not include additional covariates. Robust standard errors in parentheses.",
+          omit.stat = c("ser", "f", "rsq"),
+          font.size = "small",
+          no.space = T,
+          dep.var.labels = c("Has City-Based Voter ID", "Voted in City in 2019"),
+          order=c("i_t1:b_hindi"),
+          covariate.labels = c("T1 x Hindi fluency",
+                               "T1",
+                               "Hindi fluency"),
+          header = FALSE,
+          float.env = "table",
+          notes.label = "")
+```
+
+\clearpage
+
+## T1 main results controlling for Hindi fluency
+
+```{r results="asis"}
+# t1 table; voting
+  p1 <- t1_estimates(dv = "e_voter_id", lag = "b_has_village_voter_id + b_hindi", cov = T)
+  p2 <- t1_estimates(dv = "e_voted_2019", lag = "b_not_voted_previously + b_hindi", cov = T)
+  p3 <- t1_estimates(dv = "e_vote_future", lag = "b_vote_mc_elecs_how_likely + b_hindi", cov = T)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Has City-Based\n Voter ID \n(1)", 
+      "Voted in City\n in 2019 \n(2)", 
+      "Likelihood of Voting\n in City in Future \n(3)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 0.33, 0.67, 1\\}$")
+  
+# set caption
+  cap <- 
+    "[Exploratory] T1 experimental results for primary political outcomes, controlling for Hindi fluency, in addition to the set of pre-registered control variables. OLS estimates of intent to treat effects. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+      kable_styling(latex_options = c("hold_position"))
+```
+
+```{r, results='asis'}
+# t1 table; additional attitudes
+  p1 <- t1_estimates(dv = "e_political_interest", lag = "b_political_interest + b_hindi", cov = T)
+  p2 <- t1_estimates(dv = "e_political_accountability", lag = "b_hindi", cov = T)
+  p3 <- t1_estimates(dv = "e_political_efficacy", lag = "b_political_efficacy + b_hindi", cov = T)
+  p4 <- t1_estimates(dv = "e_political_trust", lag = "b_political_trust + b_hindi", cov = T)
+  
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Political\n Interest\n Index \n(1)", 
+      "Politician\n Accountability\n Perceptions \n(2)", 
+      "Sense of\n Political\n Efficacy \n(3)", 
+      "Political\n Trust\n Index \n(4)")
+
+# dv values
+  dvs_val <-
+    c("DV values",
+      "$[-1.44, 1.56]$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$[-1.62, 1.17]$")
+
+# set caption
+  cap <- 
+    "[Exploratory] T1 experimental results for additional political outcomes, controlling for Hindi fluency, in addition to the set of pre-registered control variables. OLS estimates of intent to treat effects. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab, p4$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+      kable_styling(latex_options = c("hold_position"))
+```
+
+\clearpage
+
+## T1 main results without covariates
+
+```{r results="asis"}
+# t1 table; voting
+  p1 <- t1_estimates(dv = "e_voter_id", lag = "b_has_village_voter_id", cov = F)
+  p2 <- t1_estimates(dv = "e_voted_2019", lag = "b_not_voted_previously", cov = F)
+  p3 <- t1_estimates(dv = "e_vote_future", lag = "b_vote_mc_elecs_how_likely", cov = F)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Has City-Based\n Voter ID \n(1)", 
+      "Voted in City\n in 2019 \n(2)", 
+      "Likelihood of Voting\n in City in Future \n(3)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 1\\}$", 
+      "$\\{0, 0.33, 0.67, 1\\}$")
+  
+# set caption
+  cap <- 
+    "[Exploratory] T1 experimental results for primary political outcomes. OLS estimates of intent to treat effects. Models do not include covariates. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>% 
+    kable_styling(latex_options = "hold_position")
+```
+
+```{r results="asis"}
+# t1 table; additional attitudes
+  p1 <- t1_estimates(dv = "e_political_interest", cov = F)
+  p2 <- t1_estimates(dv = "e_political_accountability", cov = F)
+  p3 <- t1_estimates(dv = "e_political_efficacy", cov = F)
+  p4 <- t1_estimates(dv = "e_political_trust", cov = F)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Political\n Interest\n Index \n(1)", 
+      "Politician\n Accountability\n Perceptions \n(2)", 
+      "Sense of\n Political\n Efficacy \n(3)", 
+      "Political\n Trust\n Index \n(4)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$[-1.44, 1.56]$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$\\{0, 0.33, 0.67, 1\\}$",
+      "$[-1.62, 1.17]$")
+
+# set caption
+  cap <- 
+    "[Exploratory] T1 experimental results for additional political outcomes. OLS estimates of intent to treat effects. Models do not include covariates. Robust standard errors in parentheses."
+    
+# print table
+  bind_cols(rns1, p1$tab, p2$tab, p3$tab, p4$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+      kable_styling(latex_options = c("hold_position"))
+```
+
+\clearpage
+
+# Vote choice
+
+This section compares the partisan preferences of migrants in our experimental sample with the preferences of immediately surrounding local populations.
+
+In the descriptive (non-experimental) analysis presented in Figure \ref{fig:party_vote_comparison}, we compare reported vote choice by all migrants in our experimental sample (i.e. both those in the T1 treatment and T1 control groups) to the final 2019 electoral returns (a) in the seven Lok Sabha constituencies in which we worked, and (b) in the specific polling-station localities in which we worked---and therefore where our migrants were entitled to cast a vote. Administrative data was obtained from the Trivedi Centre for Political Data at Ashoka University, and from the “Form 20” polling-station returns published online by the Election Commission of India, which we digitized. We conduct the comparisons separately for Delhi and Lucknow. We do this because, although the two major national parties (the Indian National Congress, INC, and the Bharatiya Janata Party, BJP) received substantial support in both locations, the Aam Aadmi Party (AAAP) was only seriously competitive in Delhi, while the Bahujan Samaj Party (BSP) and Samajwadi Party (SP) were only seriously competitive in Lucknow.
+
+The results of this analysis need to be heavily caveated by the fact that only a minority of registered respondents in our endline survey were willing to reveal their vote choice to enumerators. Consequently, our estimates of the sample's vote choice are noisy and may not be representative of the sample as a whole. Nevertheless, the comparisons are revealing.
+
+```{r, fig.cap="\\label{fig:party_vote_comparison}[Exploratory] Comparison of the distributions of party-wise support between migrants in the experimental sample and the final vote tallied at the constituency and polling-station levels.", fig.show="hold"}
+# create delhi plot
+  del_final_plot <- 
+    ls_ps_t1_combined %>%
+    filter(city=="delhi") %>%
+    ggplot(data = ., 
+           aes(x = party, y = party_share, group = factor(`source`))) +
+    geom_bar(stat = "identity", 
+             position = "dodge", 
+             aes(fill = factor(`source`))) +
+    labs(title = "(a) Delhi 2019 Lok Sabha Results",
+         x = "",
+         y = "Vote Share",
+         fill = "Level") +
+    scale_x_discrete(limits = c("bjp", "inc", "aaap", "other"), 
+                     labels = c("bjp" = "BJP", "inc" = "INC", "aaap" = "AAAP", "other" = "Other")) +
+    theme_bw()
+
+# create lucknow plot
+  luc_final_plot <- 
+    ls_ps_t1_combined %>%
+    filter(city=="lucknow") %>%
+    ggplot(data = ., 
+           aes(x = party, y = party_share, group = factor(`source`))) +
+    geom_bar(stat = "identity", position = "dodge", aes(fill = factor(`source`))) +
+    labs(title = "(b) Lucknow 2019 Lok Sabha Results",
+         x = "Party",
+         y = "Vote Share",
+         fill = "Level") +
+    scale_x_discrete(limits = c("bjp", "inc", "bsp", "sp", "other"), 
+                     labels = c("bjp" = "BJP", "bsp" = "BSP", "inc" = "INC", "sp" = "SP", "other" = "Other")) +
+    theme_bw()
+    
+#adjust y limit on lucknow for eveness between delhi
+  luc_final_plot <- 
+    luc_final_plot + 
+    ylim(0, 0.8)
+
+# present both plots
+  grid.arrange(del_final_plot, luc_final_plot)
+```
+
+\clearpage
+
+# T2 additional results
+
+## T2 effects on trust and integration
+
+```{r results="asis"} 
+# create outputs  
+  p1 <- felm(e_political1_trust_nat_gov ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+
+  p2 <- felm(e_political2_trust_sta_gov ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+  p3 <- felm(e_political3_trust_mc_gov ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+  p4 <- felm(e_political4_trust_parties ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+  p5 <- felm(e_social1_integration_city_home ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+  p6 <- felm(e_social3_integration_plan_to_live ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+  p7 <- felm(e_social4_integration_recommend_live ~ i_t2_treat | i_t2_block | 0 | i_t2_cluster,
+             weights = t2_experiment_df$i_t2_weight,
+             data = t2_experiment_df)
+  
+# labels
+  labels <- 
+    c("\\shortstack{Trust: \\\\ National \\\\ Gov.}",
+      "\\shortstack{Trust: \\\\ State \\\\ Gov.}",
+      "\\shortstack{Trust: \\\\ Municipal \\\\ Gov.}",
+      "\\shortstack{Trust: \\\\ Political \\\\ Parties}",
+      "\\shortstack{Considers \\\\\ City \\\\ Home}",
+      "\\shortstack{Plans \\\\ to Live \\\\ in City}",
+      "\\shortstack{Recommends \\\\ Others Live \\\\ in City}")
+
+# table
+  stargazer(p1, p2, p3, p4, p5, p6, p7,
+            type="latex",
+            title = "[Exploratory] Estimates of T2 effects on trust in political institutions and social integration. Outcomes are whether respondent has trust in the national (1), state (2), and municipal governments (3), and in political parties (4); whether the respondent considers the city to be “home” (5); for how many more years they plan to live in the city (6); and whether they would recommend to friends and relatives in their hometown to come to the city to live and work (7). Weighted least squares estimates of intent to treat effects. Clusters weighted equally. Models include block fixed effects but no additional covariates. Cluster-robust standard errors in parentheses.",
+            omit.stat = c("ser", "f", "rsq"),
+            font.size = "footnotesize",
+            no.space = T,
+            dep.var.labels = labels,
+            covariate.labels = "T2",
+            header = F,
+            float.env = "table",
+            notes.label = "")
+```
+
+\clearpage
+
+## T2 results without covariates
+
+```{r results="asis"} 
+# t2 table 
+  p1 <- t2_estimates("e_campaign_exposure", cov = T)
+  p2 <- t2_estimates("e_campaign1_exposure_visits", cov = F)
+  p3 <- t2_estimates("e_campaign2_exposure_canvassed", cov = F)
+  p4 <- t2_estimates("e_campaign3_exposure_gifts", cov = F)
+  p5 <- t2_estimates("e_campaign4_exposure_migrants", cov = F)
+  p6 <- t2_estimates("e_campaign5_exposure_hardwork", cov = F)
+
+# dv names  
+  dvs_name <- 
+    c("NULL", 
+      "Campaigning\n Exposure\n Index \n(1)",
+      "Basti\nVisits by\n Politicians \n(2)",
+      "Home Visit\n by Politician or\n Party Worker  \n(3)",
+      "Number\n of\n Gifts \n(4)",
+      "Migrant-\n Focused\n Campaigning \n(5)",
+      "Perceived\n Campaign\n Intensity \n(6)")
+
+# dv values
+  dvs_val <- 
+    c("DV values", 
+      "$[-0.96, 3.65]$",
+      "$\\{0, \\ldots, 4\\}$",
+      "$\\{0, 1\\}$",
+      "$\\{0, 1, 2\\}$",
+      "$\\{0, 1\\}$",
+      "$\\{0, 0.33, 0.67, 1\\}$")
+  
+# set caption
+  cap <- 
+    "[Exploratory] T2 experimental results for exposure to campaigning during the 2019 elections. Weighted least squares estimates of intent to treat effects. Clusters weighted equally. Models do not include covariates. Cluster-robust standard errors in parentheses."
+  
+# print table
+  bind_cols(rns2, p1$tab, p2$tab, p3$tab, p4$tab, p5$tab, p6$tab) %>% 
+  setNames(dvs_name) %>% 
+  bind_rows(data.frame(t(dvs_val)) %>% setNames(dvs_name)) %>%
+  mutate_all(linebreak) %>%
+  kable("latex", 
+      booktabs = T, 
+      escape = F,
+      col.names = linebreak(c("", dvs_name[-1]), align = "c"),
+      caption = cap,
+      linesep = "",
+      align = c("l", rep("c", length(dvs_name)-1) )) %>% 
+      row_spec(2, hline_after = T) %>%
+  add_header_above(c("", " ", "Index Components" = 5)) %>% 
+  kable_styling(font_size = 10,
+                latex_options = c("hold_position"))
+```
+
+\clearpage
+
+# Migrant voting behavior over time
+
+```{r, results="asis"}
+# print table
+  migrant_voting_behavior %>%
+    kable("latex", 
+          booktabs = T, 
+          escape = F,
+          longtable = T,
+          col.names = linebreak(
+            c("Election",
+              "Vote choice"),
+              align = "l"),
+          caption = "\\label{tab:voting_behavior}Migrant versus non-migrant voting behavior in Delhi elections over time. Note, in some cases the reported percentages represent weighted averages based on relative population shares described in the given source.",
+          linesep = "") %>%
+    kable_styling(latex_options =
+                        c("scale_down",
+                        "hold_position",
+                        "striped",
+                        "repeat_header"),
+                  repeat_header_text = "(\\textit{continued}) Migrant versus non-migrant voting behavior in Delhi elections over time.",
+                  repeat_header_method = "replace",
+                  font_size = 9) %>%
+  column_spec(1:2, width = "20em")
+```
+
+\clearpage
+
+# Research locations
+
+```{r, echo = F, fig.show="hold", out.width = "50%", fig.align="center", fig.cap="Approximate locations of the experimental sample: Delhi. Boundaries represent assembly constituency segments within the Lok Sabha constituencies in which the experiment was fielded."}
+include_graphics(c(pic_del_map))
+```
+
+\clearpage
+
+```{r, echo = F, fig.show="hold", out.width = "80%", fig.align="center", fig.cap="Approximate locations of the experimental sample: Lucknow. Boundaries represent assembly constituency segments within the Lok Sabha constituencies in which the experiment was fielded."}
+include_graphics(c(pic_luc_map))
+```
