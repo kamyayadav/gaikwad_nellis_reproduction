@@ -54,7 +54,6 @@ fontsize: 11.5pt
     pks <- c(
       "DeclareDesign",
       "tidyverse",
-      "kableExtra",
       "magrittr",
       "rio",
       "stargazer",
@@ -71,6 +70,13 @@ fontsize: 11.5pt
 # install if necessary and load  
   invisible(lapply(pks, function(x) if (!require(x, character.only=T)){
     install.packages(x);library(x, character.only = T)}))
+  
+# install and load kableExtra and systemfonts
+  install.packages("systemfonts")
+  install.packages("kableExtra", dependencies = TRUE)
+  library(kableExtra)
+
+#make sure to comment out any install.package commands before knitting or running the file
 ```
 
 
