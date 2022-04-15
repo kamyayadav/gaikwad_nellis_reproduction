@@ -1,5 +1,5 @@
 # gaikwad_nellis_reproduction
- Reproduction Package for Gaikwad and Nellis (2021) 
+ Revised Reproduction Package for Gaikwad and Nellis (2021) 
  
 `revised_reproduction_packahe_for_gaikwad_nellis(2021)` contains all the files for the reproduction package. 
 - `dataverse_files` is the folder with the data sets and code required to produce the tables and figures in the main paper and online appendix.
