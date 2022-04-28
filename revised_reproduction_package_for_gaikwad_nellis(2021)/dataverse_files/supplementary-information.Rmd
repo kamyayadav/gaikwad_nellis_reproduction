@@ -72,9 +72,10 @@ fontsize: 11.5pt
     install.packages(x);library(x, character.only = T)}))
   
 # install and load kableExtra and systemfonts
-  install.packages("systemfonts")
-  install.packages("kableExtra", dependencies = TRUE)
+  #install.packages("systemfonts")
+  #install.packages("kableExtra", dependencies = TRUE)
   library(kableExtra)
+  library(hutilscpp)
 
 #make sure to comment out any install.package commands before knitting or running the file
 ```
@@ -160,12 +161,12 @@ fontsize: 11.5pt
 
 # winsorize in T1 df
   t1_experiment_df %<>%
-    mutate(b_income_000_OUTLIER_FIXED = (squish(t1_experiment_df$b_income, a = 1000, b = 30000)/1000),
+    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, a = 1000, b = 30000)/1000),
            b_income_000 = b_income/1000)
 
 # winsorize in T2 df
   t2_experiment_df %<>% 
-    mutate(b_income_000_OUTLIER_FIXED = (squish(t1_experiment_df$b_income, a = 1000, b = 30000)/1000),
+    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, a = 1000, b = 30000)/1000),
            b_income_000 = b_income/1000)
 ```
 
