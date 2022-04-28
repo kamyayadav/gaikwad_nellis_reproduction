@@ -160,12 +160,12 @@ fontsize: 11.5pt
 
 # winsorize in T1 df
   t1_experiment_df %<>%
-    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, quantile(b_income, c(0, .99)))/1000),
+    mutate(b_income_000_OUTLIER_FIXED = (squish(t1_experiment_df$b_income, a = 1000, b = 30000)/1000),
            b_income_000 = b_income/1000)
 
 # winsorize in T2 df
   t2_experiment_df %<>% 
-    mutate(b_income_000_OUTLIER_FIXED = (squish(b_income, quantile(b_income, c(0, .99)))/1000),
+    mutate(b_income_000_OUTLIER_FIXED = (squish(t1_experiment_df$b_income, a = 1000, b = 30000)/1000),
            b_income_000 = b_income/1000)
 ```
 
